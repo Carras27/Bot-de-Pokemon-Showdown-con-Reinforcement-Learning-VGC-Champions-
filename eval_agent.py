@@ -41,8 +41,7 @@ BATTLE_FORMAT = "gen9championsvgc2026regmb"
 
 class LoggingMaxBasePowerOpponent(LoggingPlayer):
     """Igual que LoggingPlayer, pero elige movimientos con la heurística de
-    MaxBasePowerPlayer (máximo daño) en vez de al azar. Así la evaluación
-    mide algo más exigente que 'ganarle a random'."""
+    MaxBasePowerPlayer (máximo daño) en vez de al azar."""
 
     def choose_move(self, battle):
         if self.format_is_doubles:

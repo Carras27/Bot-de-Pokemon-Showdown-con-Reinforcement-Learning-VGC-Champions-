@@ -8,7 +8,14 @@ singles, no dobles).
 import numpy as np
 from gymnasium.spaces import Box
 from poke_env.environment.doubles_env import DoublesEnv # API para combates dobles
-from poke_env.battle.pokemon_type import PokemonType 
+from poke_env.battle.pokemon_type import PokemonType
+from poke_env.ps_client.account_configuration import AccountConfiguration
+
+# Genera las 360 combinaciones posibles de team preview en VGC ("1234", "1235", "2143", etc.)
+VGC_TEAM_PREVIEW_COMBOS = [
+    "".join(map(str, combo))
+    for combo in itertools.permutations(range(1, 7), 4)
+]
 
 # Diccionario para mapear los 18 (20?) tipos de Pokémon a un número único (0 a 17 (19?))
 # Creo que son 20 tipos, está el Stellar y el ???
@@ -40,14 +47,51 @@ class ChampionsDoublesEnv(DoublesEnv):
         obs_low = np.full(OBS_SIZE, -1.0, dtype=np.float32)
         obs_high = np.full(OBS_SIZE, 1.0, dtype=np.float32)
 
-        # NOTA DE API: Asignamos un `Box` crudo a cada agente dentro de `self.observation_spaces`.
-        # Poke-env intercepta internamente esta asignación y la envuelve automáticamente en un Dict con:
-        # Dict({"observation": ..., "action_mask": ...}). Evitamos pasarle un Dict explícito aquí.
         raw_obs_space = Box(low=obs_low, high=obs_high, dtype=np.float32)
         self.observation_spaces = {agent: raw_obs_space for agent in self.possible_agents}
 
         self.last_opp_hp = {}  # Para rastrear la vida rival del turno anterior
 
+    # -------------------------------------------------------------------
+    # MÉTODOS PARA TEAM PREVIEW
+    # -------------------------------------------------------------------
+    def teampreview_action_to_string(self, action: int, battle=None) -> str:
+        """
+        Poke-env llama a este método automáticamente durante el turno 0
+        para convertir la acción numérica elegida por la IA en un comando `/team XXXX`.
+        """
+        combo_idx = action % len(VGC_TEAM_PREVIEW_COMBOS)
+        order_str = VGC_TEAM_PREVIEW_COMBOS[combo_idx] # Calcula aleatoriamente el orden de salida de los 4 Pokémon elegidos en Team Preview
+        return f"/team {order_str}"
+
+    def action_masks(self, *args, **kwargs) -> np.ndarray:
+        """
+        Genera la máscara de acciones diferenciando si estamos en Team Preview (Turno 0)
+        o en combate normal (Turnos 1+).
+        """
+        # Obtenemos la batalla actual desde el propio entorno de poke-env
+        battle = getattr(self, "current_battle", None)
+
+        # CASO 1: Turno 0 (Team Preview)
+        if battle and getattr(battle, "teampreview", False):
+            mask = np.zeros(self.action_space.n, dtype=bool)
+            # Habilitamos únicamente las opciones asignadas a Team Preview
+            max_combos = min(len(VGC_TEAM_PREVIEW_COMBOS), self.action_space.n)
+            mask[:max_combos] = True
+            return mask
+
+        # CASO 2: Combate normal
+        # Si DoublesEnv ya provee action_masks, la llamamos; si no, permitimos las acciones del espacio
+        if hasattr(super(), "action_masks"):
+            return super().action_masks(*args, **kwargs)
+
+        return np.ones(self.action_space.n, dtype=bool)
+
+
+
+    # -------------------------------------------------------------------
+    # MÉTODOS DE OBSERVACIÓN Y RECOMPENSA
+    # -------------------------------------------------------------------
     def _encode_type(self, pokemon_type) -> float:
         """Convierte un PokemonType a un float entre 0.0 y 1.0."""
         if pokemon_type in TYPE_MAP:
@@ -224,3 +268,5 @@ class ChampionsDoublesEnv(DoublesEnv):
         # Unir todas las partes
         full_obs = own_vec + opp_vec + moves_vec + global_vec + side_vec + misc_vec
         return np.array(full_obs, dtype=np.float32)
+
+    

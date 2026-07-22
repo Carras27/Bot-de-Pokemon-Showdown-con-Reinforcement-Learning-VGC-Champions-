@@ -28,303 +28,28 @@ from pathlib import Path
 from poke_env.data import to_id_str
 from poke_env.player import Player
 from poke_env.teambuilder import Teambuilder
+from teams import USER_TEAM, OPPONENT_TEAMS
+from poke_env.player import MaxBasePowerPlayer
 
 DB_DIR = Path(__file__).parent / "database"
 DB_DIR.mkdir(exist_ok=True)
 DB_PATH = DB_DIR / "showdown_stats.db"
 DB_LOCK = threading.Lock()
 
-# -----------------------------------------------------------------------
-# EQUIPO DEL JUGADOR 1 (el tuyo). Cámbialo cuantas veces quieras: cada
-# equipo distinto se registra automáticamente con su propio team_id.
-# Pégalo en formato "Export" de Showdown (Teambuilder -> Export).
-# -----------------------------------------------------------------------
-USER_TEAM = """
-Aerodactyl @ Aerodactylite  
-Ability: Unnerve  
-Level: 50  
-EVs: 2 HP / 32 Atk / 32 Spe  
-Jolly Nature  
-- Protect  
-- Dual Wingbeat  
-- Rock Slide  
-- Tailwind  
+# Genera las 360 permutaciones posibles para elegir 4 Pokémon de 6 ("1234", "1235", etc.)
+VGC_TEAM_PREVIEW_COMBOS = [
+    "".join(map(str, combo))
+    for combo in itertools.permutations(range(1, 7), 4)
+]
 
-Kingambit @ Black Glasses  
-Ability: Supreme Overlord  
-Level: 50  
-EVs: 32 HP / 32 Atk / 2 Spe  
-Adamant Nature  
-- Kowtow Cleave  
-- Iron Head  
-- Sucker Punch  
-- Swords Dance  
-
-Gyarados @ Focus Sash  
-Ability: Intimidate  
-Level: 50  
-EVs: 2 HP / 32 Atk / 32 Spe  
-Jolly Nature  
-- Waterfall  
-- Earthquake  
-- Ice Fang  
-- Dragon Dance  
-
-Hippowdon @ Sitrus Berry  
-Ability: Sand Stream  
-Level: 50  
-EVs: 32 HP / 32 Def / 2 SpD  
-Impish Nature  
-- Earthquake  
-- Slack Off  
-- Yawn  
-- Stealth Rock  
-
-Archaludon @ Leftovers  
-Ability: Stamina  
-Level: 50  
-EVs: 32 HP / 2 Def / 32 SpD  
-Calm Nature  
-- Thunderbolt  
-- Draco Meteor  
-- Stealth Rock  
-- Roar  
-
-Primarina @ Mystic Water  
-Ability: Torrent  
-Level: 50  
-EVs: 32 HP / 32 SpA / 2 Spe  
-Modest Nature  
-- Sparkling Aria  
-- Aqua Jet  
-- Flip Turn  
-- Moonblast  
-"""
-
-# Pool de equipos del jugador 2 (el "rival"). En cada partida se elige uno
-# al azar de esta lista.
-OPPONENT_TEAMS: list[str] = ["""
-Kangaskhan-Mega @ Kangaskhanite
-Ability: Scrappy
-EVs: 2 HP / 32 Atk / 32 Spe
-Jolly Nature
-- Fake Out
-- Double-Edge
-- Sucker Punch
-- Low Kick
-
-Starmie @ Leftovers
-Ability: Natural Cure
-EVs: 32 SpA / 2 Def / 32 Spe
-Timid Nature
-- Surf
-- Ice Beam
-- Recover
-- Rapid Spin
-
-Arcanine @ Quick Claw
-Ability: Intimidate
-EVs: 32 HP / 2 Atk / 32 Spe
-Jolly Nature
-- Flare Blitz
-- Extreme Speed
-- Will-O-Wisp
-- Morning Sun
-
-Clefable @ Sitrus Berry
-Ability: Unaware
-EVs: 32 HP / 32 Def / 2 SpD
-Bold Nature
-- Moonblast
-- Helping Hand
-- Thunder Wave
-- Stealth Rock
-
-Alakazam @ Focus Sash
-Ability: Magic Guard
-EVs: 32 SpA / 2 SpD / 32 Spe
-Timid Nature
-- Psychic
-- Shadow Ball
-- Encore
-- Focus Blast
-
-Tauros-Paldea-Blaze @ Choice Scarf
-Ability: Cud Chew
-EVs: 32 Atk / 2 Def / 32 Spe
-Jolly Nature
-- Raging Bull
-- Close Combat
-- Flare Blitz
-- Earthquake
-""",
-"""
-Charizard @ Charizardite Y
-Ability: Blaze
-EVs: 2 HP / 32 SpA / 32 Spe
-Timid Nature
-- Fire Blast
-- Solar Beam
-- Air Slash
-- Roost
-
-Venusaur @ Life Orb
-Ability: Chlorophyll
-EVs: 32 SpA / 2 SpD / 32 Spe
-Timid Nature
-- Giga Drain
-- Sludge Bomb
-- Earth Power
-- Sleep Powder
-
-Arcanine-Hisui @ Black Belt
-Ability: Rock Head
-EVs: 32 Atk / 2 Def / 32 Spe
-Adamant Nature
-- Head Smash
-- Flare Blitz
-- Extreme Speed
-- Close Combat
-
-Starmie @ Leftovers
-Ability: Natural Cure
-EVs: 32 SpA / 2 Def / 32 Spe
-Timid Nature
-- Surf
-- Recover
-- Rapid Spin
-- Ice Beam
-
-Clefable @ Sitrus Berry
-Ability: Unaware
-EVs: 32 HP / 32 Def / 2 SpD
-Bold Nature
-- Moonblast
-- Stealth Rock
-- Helping Hand
-- Thunder Wave
-
-Raichu-Alola @ Focus Sash
-Ability: Surge Surfer
-EVs: 32 SpA / 2 SpD / 32 Spe
-Timid Nature
-- Thunderbolt
-- Grass Knot
-- Encore
-- Nasty Plot
-""",
-"""
-Gengar @ Gengarite
-Ability: Cursed Body
-EVs: 2 HP / 32 SpA / 32 Spe
-Timid Nature
-- Shadow Ball
-- Sludge Bomb
-- Focus Blast
-- Destiny Bond
-
-Machamp @ Quick Claw
-Ability: No Guard
-EVs: 32 HP / 32 Atk / 2 Def
-Adamant Nature
-- Dynamic Punch
-- Knock Off
-- Bullet Punch
-- Ice Punch
-
-Pidgeot-Mega @ Pidgeotite
-Ability: No Guard
-EVs: 2 HP / 32 SpA / 32 Spe
-Timid Nature
-- Hurricane
-- Heat Wave
-- U-turn
-- Roost
-
-Starmie @ Leftovers
-Ability: Natural Cure
-EVs: 32 SpA / 2 Def / 32 Spe
-Timid Nature
-- Surf
-- Recover
-- Rapid Spin
-- Thunderbolt
-
-Ninetales-Alola @ Light Clay
-Ability: Snow Warning
-EVs: 32 HP / 2 SpD / 32 Spe
-Timid Nature
-- Aurora Veil
-- Freeze-Dry
-- Encore
-- Moonblast
-
-Tauros @ Choice Scarf
-Ability: Intimidate
-EVs: 32 Atk / 2 Def / 32 Spe
-Jolly Nature
-- Body Slam
-- Earthquake
-- Rock Slide
-- Close Combat
-""",
-"""
-Tyranitar @ Tyranitarite
-Ability: Sand Stream
-EVs: 32 HP / 32 Atk / 2 SpD
-Adamant Nature
-- Rock Slide
-- Knock Off
-- Low Kick
-- Dragon Dance
-
-Excadrill @ Life Orb
-Ability: Sand Rush
-EVs: 32 Atk / 2 Def / 32 Spe
-Jolly Nature
-- Earthquake
-- Iron Head
-- Rock Slide
-- Protect
-
-Rotom-Wash @ Sitrus Berry
-Ability: Levitate
-EVs: 32 HP / 22 Def / 12 SpD
-Bold Nature
-- Hydro Pump
-- Volt Switch
-- Will-O-Wisp
-- Protect
-
-Corviknight @ Leftovers
-Ability: Mirror Armor
-EVs: 32 HP / 22 Def / 12 SpD
-Impish Nature
-- Brave Bird
-- Body Press
-- Roost
-- U-turn
-
-Sinistcha @ Occa Berry
-Ability: Hospitality
-EVs: 32 HP / 20 Def / 14 SpD
-Bold Nature
-- Matcha Gotcha
-- Rage Powder
-- Strength Sap
-- Trick Room
-
-Primarina @ Mystic Water
-Ability: Torrent
-EVs: 32 HP / 32 SpA / 2 SpD
-Modest Nature
-- Moonblast
-- Hydro Pump
-- Ice Beam
-- Psychic Noise
-"""]  # <-- rellena con 1 o más equipos rivales
-
-
+class VGCMaxBasePowerPlayer(MaxBasePowerPlayer):
+    """
+    Oponente con la heurística de MaxBasePowerPlayer para VGC.
+    De momento elegirá los pokémon en la preview en orden de escritura.
+    """
+    def teampreview(self, battle):
+        # En VGC se deben seleccionar 4 Pokémon (ej. los 4 primeros: "/team 1234")
+        return "/team 1234"
 class RandomTeamFromPool(Teambuilder):
     """Elige un equipo al azar de una lista en cada partida."""
 
@@ -508,8 +233,11 @@ class LoggingPlayer(Player):
         # Solo los Pokémon elegidos en Team Preview pueden llegar a salir al
         # campo; esto es lo que usamos para saber cuáles fueron los 4 de 6
         # realmente elegidos (battle.team/opponent_team incluyen los 6).
-        self._revealed_active: dict[str, dict[str, set]] = {}
+        self._revealed_active: dict[str, dict[str, set]]= {}
 
+    def teampreview(self, battle):
+        return "/team 1234"  # Elige los 4 primeros Pokémon del equipo de usuario
+    
     def choose_move(self, battle):
         order = self.choose_random_move(battle)
         self._log_turn(battle, order)

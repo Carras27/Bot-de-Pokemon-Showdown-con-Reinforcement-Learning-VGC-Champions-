@@ -10,15 +10,15 @@ Jolly Nature
 - Rock Slide  
 - Tailwind  
 
-Kingambit @ Black Glasses  
-Ability: Supreme Overlord  
+Meowscarada @ Choice Scarf  
+Ability: Protean  
 Level: 50  
-EVs: 32 HP / 32 Atk / 2 Spe  
-Adamant Nature  
-- Kowtow Cleave  
-- Iron Head  
-- Sucker Punch  
-- Swords Dance  
+EVs: 2 HP / 32 Atk / 32 Spe  
+Jolly Nature  
+- Flower Trick  
+- Knock Off  
+- U-turn  
+- Triple Axel
 
 Gyarados @ Focus Sash  
 Ability: Intimidate  
