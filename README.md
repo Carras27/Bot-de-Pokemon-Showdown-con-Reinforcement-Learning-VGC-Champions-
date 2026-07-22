@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Pokémon Showdown Bot — Setup inicial
 
 Este proyecto arranca un servidor Showdown local y un bot en Python (con
@@ -53,15 +52,7 @@ sqlite> SELECT * FROM battles;
 sqlite> SELECT * FROM turns LIMIT 10;
 ```
 
-## Siguientes pasos sugeridos
-
-1. Cambia `LoggingPlayer` por un heurístico (ej. "máximo daño") para tener
-   una baseline mejor que random.
-2. Amplía el logging con más columnas (movimientos usados, boosts, weather).
-3. Cuando tengas suficientes partidas registradas, esos datos sirven como
-   punto de partida para behavioral cloning antes de pasar a RL (PPO/DQN)
-   con Stable-Baselines3, que poke-env soporta de forma nativa.
 =======
-# Bot-de-Pok-mon-Showdown-con-Reinforcement-Learning-VGC-Champions-
+# Bot-de-Pokemon-Showdown-con-Reinforcement-Learning-VGC-Champions-
 Un bot que pelea automáticamente en el formatd VGC de Pokémon Champions en play.pokemonshowdown.com y aprende a partir de estas partidas. Código creado en Python a partir de la biblioteca poke-env. 
->>>>>>> e6ae9b9af0a17058a39c0bac58ee26565e579911
+
