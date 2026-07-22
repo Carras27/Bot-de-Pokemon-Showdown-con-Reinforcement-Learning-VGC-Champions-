@@ -8,24 +8,27 @@ singles, no dobles).
 import numpy as np
 from gymnasium.spaces import Box
 from poke_env.environment.doubles_env import DoublesEnv # API para combates dobles
+from poke_env.battle.pokemon_type import PokemonType 
+
+# Diccionario para mapear los 18 (20?) tipos de Pokémon a un número único (0 a 17 (19?))
+# Creo que son 20 tipos, está el Stellar y el ???
+TYPE_MAP = {t: i for i, t in enumerate(PokemonType) if t is not None}
 
 # Constantes
 NUM_OWN_POKEMON = 6
 NUM_OPP_POKEMON = 6
 
-# Por cada Pokémon extraemos 3 características: HP (%), debilitado (0/1), activo (0/1)
-# 3*6 + 3*6 + 1 (métrica del turno actual) = 37 valores. 
-OBS_SIZE = 3 * NUM_OWN_POKEMON + 3 * NUM_OPP_POKEMON + 1
+# Tamaño del vector de observaciones (ampliable)
+OBS_SIZE = 201
 
 
 class ChampionsDoublesEnv(DoublesEnv):
     """
-    Entorno de Gymnasium personalizado para combates dobles en poke-env.
-
-    Hereda de `DoublesEnv` y se encarga de:
-      1. Definir el espacio de observación continuo para cada agente.
-      2. Calcular la recompensa en cada turno (`calc_reward`).
-      3. Vectorizar el estado del combate (`embed_battle`).
+    Entorno VGC Dobles con información avanzada:
+    - Tipos y Estadísticas (Boosts)
+    - Clima, Campos y Condiciones de Bando (Tailwind, Screens, Trick Room)
+    - Datos de Movimientos y Efectividad de tipos
+    - Estado de Megaevolución (no Teracristalización)
     """
 
     def __init__(self, *args, **kwargs):
@@ -33,9 +36,9 @@ class ChampionsDoublesEnv(DoublesEnv):
         Inicializa el entorno y configura el `observation_space` para cada agente.
         """
         super().__init__(*args, **kwargs)
-        # Límites para el espacio de observación: todos los valores están normalizados entre 0 y 1.
-        obs_low = np.zeros(OBS_SIZE, dtype=np.float32)
-        obs_high = np.ones(OBS_SIZE, dtype=np.float32)
+        # Los boosts de estadísticas pueden ir de -1.0 a 1.0, por eso el límite inferior es -1.0
+        obs_low = np.full(OBS_SIZE, -1.0, dtype=np.float32)
+        obs_high = np.full(OBS_SIZE, 1.0, dtype=np.float32)
 
         # NOTA DE API: Asignamos un `Box` crudo a cada agente dentro de `self.observation_spaces`.
         # Poke-env intercepta internamente esta asignación y la envuelve automáticamente en un Dict con:
@@ -43,86 +46,181 @@ class ChampionsDoublesEnv(DoublesEnv):
         raw_obs_space = Box(low=obs_low, high=obs_high, dtype=np.float32)
         self.observation_spaces = {agent: raw_obs_space for agent in self.possible_agents}
 
-    def calc_reward(self, battle) -> float:
-        """
-        Calcula la recompensa para el agente en el estado actual del combate.
-        Ponderación aplicada:
-          - +2.0 por cada Pokémon enemigo debilitado.
-          - +1.0 según la diferencia de porcentaje de vida (HP) a favor.
-          - +0.3 por provocar/mantener estados alterados (parálisis, quemadura, etc.).
-          - +30.0 bonus masivo si se consigue la victoria.
-        """
-        return self.reward_computing_helper(
-            battle,
-            fainted_value=2.0,
-            hp_value=1.0,
-            status_value=0.3,
-            victory_value=30.0,
-        )
+        self.last_opp_hp = {}  # Para rastrear la vida rival del turno anterior
 
-    def embed_battle(self, battle):
+    def _encode_type(self, pokemon_type) -> float:
+        """Convierte un PokemonType a un float entre 0.0 y 1.0."""
+        if pokemon_type in TYPE_MAP:
+            return TYPE_MAP[pokemon_type] / 18.0
+        return 0.0
+    
+    def _encode_pokemon_full(self, mon, is_active: bool) -> list:
         """
-        Transforma el objeto `battle` de poke-env en un vector de numpy (float32) de tamaño 37.
+        Extrae 11 características de un Pokémon.
+        Acitvo/No, Debilitado/No, Tipo(s), estadísticas (boosts) y estados alterados.
+        """
+        if mon is None:
+            return [0.0] * 11
+
+        # Tipos
+        t1 = self._encode_type(mon.type_1)
+        t2 = self._encode_type(mon.type_2)
+
+        # Modificadores de Estadísticas (Boosts: Atk, Def, SpA, SpD, Spe) de -6 a +6 -> [-1.0, 1.0]
+        boosts = mon.boosts if is_active else {'atk': 0, 'def': 0, 'spa': 0, 'spd': 0, 'spe': 0}
+        b_atk = boosts.get('atk', 0) / 6.0
+        b_def = boosts.get('def', 0) / 6.0
+        b_spa = boosts.get('spa', 0) / 6.0
+        b_spd = boosts.get('spd', 0) / 6.0
+        b_spe = boosts.get('spe', 0) / 6.0
+
+        # Estado alterado (0.0 = ninguno, 1.0 = quemado, paralizado, etc.)
+        status = 1.0 if mon.status is not None else 0.0
+
+        return [
+            mon.current_hp_fraction,
+            1.0 if mon.fainted else 0.0,
+            1.0 if is_active else 0.0,
+            t1,
+            t2,
+            status,
+            b_atk,
+            b_def,
+            b_spa,
+            b_spd,
+            b_spe,
+        ]
+
+    def _encode_move(self, move, own_mon, opp_actives) -> list:
+        """Extrae 7 características de un movimiento, incluyendo efectividad vs rivales."""
+        if move is None:
+            return [0.0] * 7
+
+        power = (move.base_power or 0) / 250.0
+        accuracy = (move.accuracy or 100) / 100.0 if isinstance(move.accuracy, (int, float)) else 1.0
         
-        Estructura del vector resultante:
-          - Índices [0:18]   -> Estado del equipo propio (6 Pokémon x 3 features).
-          - Índices [18:36]  -> Estado del equipo rival (6 Pokémon x 3 features).
-          - Índice  [36]     -> Progreso del turno actual (de 0.0 a 1.0).
-        """
+        # Categoría: Físico = 1.0, Especial = -1.0, Estado = 0.0
+        cat = 0.0
+        if move.category:
+            if move.category.name == "PHYSICAL":
+                cat = 1.0
+            elif move.category.name == "SPECIAL":
+                cat = -1.0
 
-        # ---------------------------------------------------------------------
-        # 1. Identificar qué Pokémon están activos actualmente en el campo
-        # ---------------------------------------------------------------------
-        # En dobles, `active_pokemon` puede devolver una lista o un único objeto según el estado del turno
-        active_own = battle.active_pokemon
-        active_own = active_own if isinstance(active_own, list) else [active_own]
-        own_active_species = {mon.species for mon in active_own if mon is not None}
+        move_type = self._encode_type(move.type)
 
-        active_opp = battle.opponent_active_pokemon
-        active_opp = active_opp if isinstance(active_opp, list) else [active_opp]
-        opp_active_species = {mon.species for mon in active_opp if mon is not None}
+        # Efectividad contra los 2 Pokémon rivales activos en pista
+        eff1, eff2 = 0.0, 0.0
+        if len(opp_actives) > 0 and opp_actives[0] is not None:
+            eff1 = opp_actives[0].damage_multiplier(move) / 4.0
+        if len(opp_actives) > 1 and opp_actives[1] is not None:
+            eff2 = opp_actives[1].damage_multiplier(move) / 4.0
 
-        # ---------------------------------------------------------------------
-        # 2. Vectorizar el equipo propio (6 Pokémon x 3 características)
-        # ---------------------------------------------------------------------
+        pp_fraction = (move.current_pp / move.max_pp) if move.max_pp > 0 else 0.0
+
+        return [power, accuracy, cat, move_type, eff1, eff2, pp_fraction]
+    
+    
+    def calc_reward(self, battle) -> float:
+        reward = 0.0
+
+        # 1. Recompensa por Victoria / Derrota
+        if battle.won:
+            return 5.0
+        elif battle.lost:
+            return -5.0
+
+        # 2. Calcular daño infligido y KOs en este turno
+        for mon_key, mon in battle.opponent_team.items():
+            prev_hp = self.last_opp_hp.get(mon_key, mon.current_hp_fraction)
+            curr_hp = mon.current_hp_fraction
+            
+            hp_diff = prev_hp - curr_hp
+            
+            if hp_diff > 0:
+                # Recompensa proporcional al daño causado
+                reward += hp_diff * 2.0  
+                
+                # Bonus si el golpe provocó el debilitamiento (KO directo)
+                if mon.fainted and prev_hp > 0:
+                    reward += 3.0  # Bonus por KO
+            
+            # Actualizar historial de HP
+            self.last_opp_hp[mon_key] = curr_hp
+
+        # 3. Pequeña penalización por paso de turno (para incentivar terminar rápido)
+        reward -= 0.05
+
+        return reward
+
+    def embed_battle(self, battle) -> np.ndarray:
+        # 1. Identificar Pokémon activos en pista
+        active_own = battle.active_pokemon if isinstance(battle.active_pokemon, list) else [battle.active_pokemon]
+        active_own = [m for m in active_own if m is not None]
+
+        active_opp = battle.opponent_active_pokemon if isinstance(battle.opponent_active_pokemon, list) else [battle.opponent_active_pokemon]
+        active_opp = [m for m in active_opp if m is not None]
+
+        own_active_species = {m.species for m in active_own}
+        opp_active_species = {m.species for m in active_opp}
+
+        # 2. Vectorizar Equipo Propio (6 x 11 = 66 features)
         own_vec = []
-        # Se ordena por especie para mantener cierta consistencia en el orden de los vectores
         own_team = sorted(battle.team.values(), key=lambda m: m.species)
+        for mon in own_team[:6]:
+            is_act = mon.species in own_active_species
+            own_vec += self._encode_pokemon_full(mon, is_act)
+        while len(own_vec) < 6 * 11:
+            own_vec += [0.0] * 11
 
-        for mon in own_team[:NUM_OWN_POKEMON]:
-            own_vec += [
-                mon.current_hp_fraction,    # % de vida restante (0.0 a 1.0)
-                1.0 if mon.fainted else 0.0,    # ¿Está debilitado? (1.0 = Sí, 0.0 = No)
-                1.0 if mon.species in own_active_species else 0.0,  # ¿Está activo en pista? (1.0 = Sí, 0.0 = No)
-            ]
-        # Padding de seguridad: si el equipo tiene menos de 6 Pokémon cargados en memoria,
-        # rellena con ceros hasta alcanzar 18 valores
-        while len(own_vec) < NUM_OWN_POKEMON * 3:
-            own_vec += [0.0, 0.0, 0.0]
-
-        # ---------------------------------------------------------------------
-        # 3. Vectorizar el equipo rival (6 Pokémon x 3 características)
-        # ---------------------------------------------------------------------
+        # 3. Vectorizar Equipo Rival (6 x 11 = 66 features)
         opp_vec = []
         opp_team = list(battle.opponent_team.values())
-        for mon in opp_team[:NUM_OPP_POKEMON]:
-            opp_vec += [
-                mon.current_hp_fraction,    # % de vida restante (0.0 a 1.0)
-                1.0 if mon.fainted else 0.0,    # ¿Está debilitado? (1.0 = Sí, 0.0 = No)
-                1.0 if mon.species in opp_active_species else 0.0,  # ¿Está activo en pista? (1.0 = Sí, 0.0 = No)
+        for mon in opp_team[:6]:
+            is_act = mon.species in opp_active_species
+            opp_vec += self._encode_pokemon_full(mon, is_act)
+        while len(opp_vec) < 6 * 11:
+            opp_vec += [0.0] * 11
+
+        # 4. Vectorizar Movimientos de tus Pokémon Activos (2 Pokémon x 4 movs x 7 datos = 56 features)
+        moves_vec = []
+        for slot in range(2):
+            if slot < len(active_own) and active_own[slot] is not None:
+                mon = active_own[slot]
+                moves = list(mon.moves.values())[:4]
+                for move in moves:
+                    moves_vec += self._encode_move(move, mon, active_opp)
+                while len(moves_vec) < (slot + 1) * 28:
+                    moves_vec += [0.0] * 7
+            else:
+                moves_vec += [0.0] * 28
+
+        # 5. Clima, Campos y Espacio Raro (3 features)
+        weather_val = 1.0 if battle.weather else 0.0
+        fields_val = 1.0 if battle.fields else 0.0
+        trick_room = 1.0 if "TRICK_ROOM" in [f.name for f in battle.fields] else 0.0
+        global_vec = [weather_val, fields_val, trick_room]
+
+        # 6. Condiciones de Bando / Side Conditions (8 features)
+        # (Tailwind / Viento Afín, Reflect, Light Screen, Aurora Veil)
+        def get_side_conds(side_dict):
+            names = [s.name for s in side_dict.keys()]
+            return [
+                1.0 if "TAILWIND" in names else 0.0,
+                1.0 if "REFLECT" in names else 0.0,
+                1.0 if "LIGHT_SCREEN" in names else 0.0,
+                1.0 if "AURORA_VEIL" in names else 0.0,
             ]
-        # Padding de seguridad: si el equipo tiene menos de 6 Pokémon cargados en memoria,
-        # rellena con ceros hasta alcanzar 18 valores
-        while len(opp_vec) < NUM_OPP_POKEMON * 3:
-            opp_vec += [0.0, 0.0, 0.0]
 
-        # ---------------------------------------------------------------------
-        # 4. Característica global: Duración del combate
-        # ---------------------------------------------------------------------
-        # Normaliza el número de turno entre 0.0 y 1.0 asumiendo un máximo de 20 turnos (regla VGC)
-        turn_fraction = min(battle.turn / 20.0, 1.0)
+        own_side = get_side_conds(battle.side_conditions)
+        opp_side = get_side_conds(battle.opponent_side_conditions)
+        side_vec = own_side + opp_side
 
-        # ---------------------------------------------------------------------
-        # 5. Concatenación final en un array de float32 de tamaño 37
-        # ---------------------------------------------------------------------
-        return np.array(own_vec + opp_vec + [turn_fraction], dtype=np.float32)
+        # 7. Megaevolución y Métrica de Turno (2 features)
+        can_mega = 1.0 if battle.can_mega_evolve else 0.0
+        turn_frac = min(battle.turn / 20.0, 1.0)
+        misc_vec = [can_mega, turn_frac]
+
+        # Unir todas las partes
+        full_obs = own_vec + opp_vec + moves_vec + global_vec + side_vec + misc_vec
+        return np.array(full_obs, dtype=np.float32)

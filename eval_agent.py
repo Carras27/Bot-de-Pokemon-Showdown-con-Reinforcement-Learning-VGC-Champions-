@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from poke_env.player import MaxBasePowerPlayer
 from sb3_contrib import MaskablePPO
 
 from rl_env import ChampionsDoublesEnv
@@ -36,7 +37,20 @@ from teams import USER_TEAM, OPPONENT_TEAMS
 DB_PATH = Path(__file__).parent / "database" / "showdown_stats.db"
 MODEL_NAME = "ppo_pokemon_bot"
 BATTLE_FORMAT = "gen9championsvgc2026regmb"
-RL_TEAM_ID = "RL_AGENT_V1"
+
+
+class LoggingMaxBasePowerOpponent(LoggingPlayer):
+    """Igual que LoggingPlayer, pero elige movimientos con la heurística de
+    MaxBasePowerPlayer (máximo daño) en vez de al azar. Así la evaluación
+    mide algo más exigente que 'ganarle a random'."""
+
+    def choose_move(self, battle):
+        if self.format_is_doubles:
+            order = MaxBasePowerPlayer.choose_doubles_move(battle)
+        else:
+            order = MaxBasePowerPlayer.choose_singles_move(battle)
+        self._log_turn(battle, order)
+        return order
 
 
 class RLPlayerWrapper(LoggingPlayer):
@@ -63,34 +77,41 @@ class RLPlayerWrapper(LoggingPlayer):
         return order
 
 
-def register_rl_team(conn: sqlite3.Connection):
-    """Registra el agente RL en la tabla `teams` con un team_id fijo
-    ('RL_AGENT_V1'), para distinguir sus partidas de las del bot aleatorio
-    que usa el mismo roster, y para que analyze_stats.py pueda leer su
-    roster correctamente."""
+def register_rl_team(conn: sqlite3.Connection, rl_team_id: str):
+    """Registra el agente RL en la tabla `teams` con un team_id propio,
+    para distinguir sus partidas de las del bot aleatorio que usa el mismo
+    roster, y para que analyze_stats.py pueda leer su roster correctamente."""
     _, roster = compute_team_fingerprint(USER_TEAM)
     existing = conn.execute(
-        "SELECT team_id FROM teams WHERE team_id = ?", (RL_TEAM_ID,)
+        "SELECT team_id FROM teams WHERE team_id = ?", (rl_team_id,)
     ).fetchone()
     if existing is None:
         import json
 
         conn.execute(
             "INSERT INTO teams (team_id, team_export, roster, first_seen) VALUES (?, ?, ?, ?)",
-            (RL_TEAM_ID, USER_TEAM, json.dumps(roster), time.time()),
+            (rl_team_id, USER_TEAM, json.dumps(roster), time.time()),
         )
         conn.commit()
 
 
 async def main(n_battles: int):
     conn = init_db(DB_PATH)
-    register_rl_team(conn)
 
     print(f"--- Cargando modelo: {MODEL_NAME} ---")
     model = MaskablePPO.load(MODEL_NAME)
 
+    # team_id único según cuánto ha entrenado el modelo en este momento,
+    # así evaluaciones en distintos puntos del entrenamiento quedan
+    # separadas automáticamente (nunca se mezclan en analyze_stats.py).
+    rl_team_id = f"RL_AGENT_{model.num_timesteps}steps"
+    print(f"--- Este modelo lleva {model.num_timesteps} pasos entrenados ---")
+    print(f"--- Sus partidas se guardarán bajo team_id = {rl_team_id} ---")
+
+    register_rl_team(conn, rl_team_id)
+
     opponent_pool = RandomTeamFromPool(OPPONENT_TEAMS)
-    opponent = LoggingPlayer(
+    opponent = LoggingMaxBasePowerOpponent(
         battle_format=BATTLE_FORMAT,
         team=opponent_pool,
         max_concurrent_battles=1,
@@ -103,7 +124,7 @@ async def main(n_battles: int):
         team=USER_TEAM,
         max_concurrent_battles=1,
         db_conn=conn,
-        team_id=RL_TEAM_ID,
+        team_id=rl_team_id,
     )
 
     print("--- El agente RL está combatiendo... ---")

@@ -16,7 +16,7 @@ import os
 
 import gymnasium as gym
 from poke_env.environment.single_agent_wrapper import SingleAgentWrapper
-from poke_env.player import RandomPlayer
+from poke_env.player import MaxBasePowerPlayer
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.monitor import Monitor
 
@@ -54,7 +54,9 @@ class MaskableEnvWrapper(gym.Wrapper):
 def make_env():
     # V1: el oponente usa el mismo USER_TEAM (limitación actual de poke-env:
     # el entorno solo acepta un único `team` compartido por ambos lados).
-    opponent = RandomPlayer(battle_format=BATTLE_FORMAT, team=USER_TEAM)
+    # Rival heurístico (máximo daño) en vez de random puro: más difícil de
+    # "resolver" por el agente, así que el aprendizaje es más informativo.
+    opponent = MaxBasePowerPlayer(battle_format=BATTLE_FORMAT, team=USER_TEAM)
 
     base_env = ChampionsDoublesEnv(
         battle_format=BATTLE_FORMAT,
@@ -77,10 +79,12 @@ if __name__ == "__main__":
     if os.path.exists(f"{MODEL_NAME}.zip"):
         print(f"--- Cargando modelo existente: {MODEL_NAME} ---")
         model = MaskablePPO.load(MODEL_NAME, env=env)
+        print(f"--- Pasos ya entrenados hasta ahora: {model.num_timesteps} ---")
+        model.learn(total_timesteps=args.timesteps, reset_num_timesteps=False)
     else:
         print("--- No se encontró modelo previo. Iniciando entrenamiento desde cero ---")
         model = MaskablePPO("MultiInputPolicy", env, verbose=1)
+        model.learn(total_timesteps=args.timesteps)
 
-    model.learn(total_timesteps=args.timesteps)
     model.save(MODEL_NAME)
-    print(f"--- Modelo guardado como {MODEL_NAME}.zip ---")
+    print(f"--- Modelo guardado como {MODEL_NAME}.zip (total: {model.num_timesteps} pasos) ---")

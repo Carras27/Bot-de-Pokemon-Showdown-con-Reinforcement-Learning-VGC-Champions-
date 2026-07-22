@@ -504,13 +504,32 @@ class LoggingPlayer(Player):
         super().__init__(*args, **kwargs)
         self.db_conn = db_conn
         self.team_id = team_id
+        # {battle_tag: {"own": {especies vistas activas}, "opponent": {...}}}
+        # Solo los Pokémon elegidos en Team Preview pueden llegar a salir al
+        # campo; esto es lo que usamos para saber cuáles fueron los 4 de 6
+        # realmente elegidos (battle.team/opponent_team incluyen los 6).
+        self._revealed_active: dict[str, dict[str, set]] = {}
 
     def choose_move(self, battle):
         order = self.choose_random_move(battle)
         self._log_turn(battle, order)
         return order
 
+    def _track_revealed(self, battle):
+        seen = self._revealed_active.setdefault(
+            battle.battle_tag, {"own": set(), "opponent": set()}
+        )
+        active_raw = battle.active_pokemon
+        active_list = active_raw if isinstance(active_raw, list) else [active_raw]
+        seen["own"].update(mon.species for mon in active_list if mon is not None)
+
+        opp_raw = battle.opponent_active_pokemon
+        opp_list = opp_raw if isinstance(opp_raw, list) else [opp_raw]
+        seen["opponent"].update(mon.species for mon in opp_list if mon is not None)
+
     def _log_turn(self, battle, order):
+        self._track_revealed(battle)
+
         active_raw = battle.active_pokemon
         active_list = active_raw if isinstance(active_raw, list) else [active_raw]
         active = [mon.species if mon else None for mon in active_list]
@@ -594,10 +613,9 @@ class LoggingPlayer(Player):
     def log_finished_battles(self):
         with DB_LOCK:
             for battle_tag, battle in self.battles.items():
-                user_pokemon = sorted(mon.species for mon in battle.team.values())
-                opponent_pokemon = sorted(
-                    mon.species for mon in battle.opponent_team.values()
-                )
+                seen = self._revealed_active.get(battle_tag, {"own": set(), "opponent": set()})
+                user_pokemon = sorted(seen["own"])
+                opponent_pokemon = sorted(seen["opponent"])
                 self.db_conn.execute(
                     """
                     INSERT OR REPLACE INTO battles
