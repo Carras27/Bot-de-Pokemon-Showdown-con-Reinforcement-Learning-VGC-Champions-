@@ -6,6 +6,9 @@ singles, no dobles).
 """
 
 import numpy as np
+import itertools
+import gymnasium as gym
+
 from gymnasium.spaces import Box
 from poke_env.environment.doubles_env import DoublesEnv # API para combates dobles
 from poke_env.battle.pokemon_type import PokemonType
@@ -269,4 +272,69 @@ class ChampionsDoublesEnv(DoublesEnv):
         full_obs = own_vec + opp_vec + moves_vec + global_vec + side_vec + misc_vec
         return np.array(full_obs, dtype=np.float32)
 
+class MaskableEnvWrapper(gym.Wrapper):
+    """
+    Wrapper de Gymnasium para almacenar y exponer la máscara de acciones válidas.
+
+    Extrae la clave 'action_mask' del diccionario de observaciones en cada turno
+    y la expone a través del método `action_masks()`. Esto evita que el bot
+    intente acciones ilegales (como seleccionar un movimiento sin PP, bloqueado
+    por Otra Vez / Taunt, o cambiar a un Pokémon debilitado).
+    """
+
+    def reset(self, **kwargs):
+        """Reinicia el entorno al comenzar un nuevo combate.
+
+        Extrae y almacena la máscara de acciones correspondiente al primer turno.
+        """
+        obs, info = self.env.reset(**kwargs)
+        self._last_mask = obs["action_mask"]
+        return obs, info
+
+    def step(self, action):
+        """Ejecuta una acción (movimiento o cambio) en el combate.
+
+        Actualiza la máscara con las acciones legales disponibles para el
+        siguiente turno.
+        """
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self._last_mask = obs["action_mask"]
+        return obs, reward, terminated, truncated, info
+
+    def action_masks(self):
+        """Devuelve la máscara de acciones actual.
+
+        Método requerido por librerías como `sb3-contrib` para filtrar
+        las acciones inválidas antes de que la red neuronal elija una.
+
+        Returns:
+            np.ndarray: Array booleano donde True indica una acción válida.
+        """
+        return self._last_mask
+
+def repair_conflicting_switches(action, mask):
+    """
+    Evita que los dos slots pidan cambiar al MISMO Pokémon de banca, 
+    sustituyendo el segundo slot por otra opción válida.
+    """
+    action = list(action)
+    a0, a1 = int(action[0]), int(action[1])
+    is_switch0 = 1 <= a0 < 7
+    is_switch1 = 1 <= a1 < 7
+ 
+    if is_switch0 and is_switch1 and a0 == a1:
+        half = len(mask) // 2
+        slot1_mask = mask[half:]
+ 
+        alt_switches = [i for i in range(1, 7) if i < len(slot1_mask) and slot1_mask[i] and i != a1]
+        if alt_switches:
+            action[1] = alt_switches[0]
+        else:
+            alternatives = [i for i, valid in enumerate(slot1_mask) if valid and i != a1]
+            if alternatives:
+                action[1] = alternatives[0]
+            # Si tampoco hay alternativa, se deja como está: strict=False
+            # se encarga de ese caso extremo (no debería darse casi nunca).
+ 
+    return action
     

@@ -1,23 +1,14 @@
 """
-Bot de Pokémon Showdown que juega partidas y registra estadísticas en SQLite.
-
-Cada equipo de usuario (USER_TEAM) se identifica automáticamente con un
-"team_id" calculado a partir de su contenido normalizado (Pokémon, objeto,
-EVs, naturaleza, movimientos). Si cambias cualquier cosa del equipo, el
-team_id cambia solo y se registra como un equipo nuevo en la tabla `teams`;
-si vuelves a jugar exactamente el mismo equipo, reconoce el team_id que ya
-existía y sigue acumulando partidas ahí.
-
-Requiere un servidor Showdown local corriendo (ver README.md) y poke-env
-instalado (`pip install -r requirements.txt`).
-
-Uso:
-    python showdown_stats_bot.py --battles 10 --format gen9championsvgc2026regmb
+Librería de utilidades para el bot de Pokémon Showdown.
+Contiene la gestión de base de datos SQLite, registro de estadísticas de turnos,
+generación de permutaciones para VGC y clases de jugadores base.
+ESTE ARCHIVO NO DEBE EJECUTARSE DIRECTAMENTE.
 """
 
 import argparse
 import asyncio
 import hashlib
+import itertools
 import json
 import random
 import sqlite3
@@ -26,10 +17,9 @@ import time
 from pathlib import Path
 
 from poke_env.data import to_id_str
-from poke_env.player import Player
+from poke_env.player import Player, MaxBasePowerPlayer
 from poke_env.teambuilder import Teambuilder
 from teams import USER_TEAM, OPPONENT_TEAMS
-from poke_env.player import MaxBasePowerPlayer
 
 DB_DIR = Path(__file__).parent / "database"
 DB_DIR.mkdir(exist_ok=True)
@@ -76,11 +66,7 @@ _team_parser = _TeamParser()
 def compute_team_fingerprint(team_export: str) -> tuple[str, list[str]]:
     """
     A partir del texto 'Export' de un equipo, calcula:
-    - team_id: hash corto del equipo ya normalizado (packed format). Dos
-      equipos son iguales si tienen el mismo team_id: mismos Pokémon,
-      objetos, EVs, naturalezas y movimientos. Cualquier diferencia real
-      cambia el hash; diferencias de formato (espacios, orden de líneas al
-      pegar el Export) NO cambian el hash porque se normaliza antes.
+    - team_id: hash corto del equipo ya normalizado.
     - roster: lista de las especies del equipo (para saber qué 6 Pokémon
       tiene disponibles ese team_id).
     """
@@ -239,7 +225,7 @@ class LoggingPlayer(Player):
         return "/team 1234"  # Elige los 4 primeros Pokémon del equipo de usuario
     
     def choose_move(self, battle):
-        order = self.choose_random_move(battle)
+        order = self.choose_random_move(battle) # Elige un movimiento aleratorio
         self._log_turn(battle, order)
         return order
 

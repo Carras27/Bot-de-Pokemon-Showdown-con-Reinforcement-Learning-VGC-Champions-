@@ -1,15 +1,6 @@
 """
-Hace jugar al agente RL ya entrenado partidas reales contra el pool de
-equipos rivales, y registra los resultados en la misma base de datos que
-usa showdown_stats_bot.py (para poder analizarlos con analyze_stats.py).
-
-Cambios respecto a tu versión con la API antigua:
-- action_to_move / _action_to_move ya no existen; el equivalente actual es
-  el método estático DoublesEnv.action_to_order(action, battle).
-- bot.ladder(n_battles=...) necesita un servidor con matchmaking real (otro
-  cliente esperando partida). En un servidor LOCAL normalmente no hay nadie
-  más laddeando, así que en vez de eso hacemos battle_against un rival
-  concreto (igual que showdown_stats_bot.py), que es fiable en local.
+Hace jugar al agente RL, ya entrenado, partidas reales contra el pool de
+equipos rivales. Y registra los resultados en la base de datos SQLite.
 
 Uso:
     python eval_agent.py --battles 5
