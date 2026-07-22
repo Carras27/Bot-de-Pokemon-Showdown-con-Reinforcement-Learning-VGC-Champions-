@@ -26,7 +26,7 @@ from poke_env.player import MaxBasePowerPlayer
 from sb3_contrib import MaskablePPO
 
 from rl_env import ChampionsDoublesEnv
-from showdown_stats_bot import (
+from showdown_utils import (
     LoggingPlayer,
     RandomTeamFromPool,
     compute_team_fingerprint,
