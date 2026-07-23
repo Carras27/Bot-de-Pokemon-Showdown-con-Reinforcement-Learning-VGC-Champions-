@@ -33,11 +33,11 @@ VGC_TEAM_PREVIEW_COMBOS = [
 class VGCMaxBasePowerPlayer(MaxBasePowerPlayer):
     """
     Oponente con la heurística de MaxBasePowerPlayer para VGC.
-    De momento elegirá los pokémon en la preview en orden de escritura.
     """
     def teampreview(self, battle):
-        # En VGC se deben seleccionar 4 Pokémon (ej. los 4 primeros: "/team 1234")
-        return "/team 1234"
+        # Elige 4 de los 6 al azar (y marca _selected_in_teampreview
+        # correctamente), en vez de traer siempre los 4 primeros.
+        return self.random_teampreview(battle)
 
 class RandomTeamFromPool(Teambuilder):
     """Elige un equipo al azar de una lista en cada partida."""
@@ -255,9 +255,10 @@ class LoggingPlayer(Player):
         self.team_id = team_id # Identificador del equipo del jugador.
         self._revealed_active: dict[str, dict[str, set]]= {}
 
-    # Elige los 4 Pokémon que saldrán en la preview de VGC. Por defecto, elige los 4 primeros.
+    # Elige 4 de los 6 Pokémon al azar para la preview de VGC (y marca
+    # _selected_in_teampreview correctamente en cada uno).
     def teampreview(self, battle):
-        return "/team 1234"
+        return self.random_teampreview(battle)
 
     # Registra la acción elegida en la base de datos y
     # devuelve la orden para que Showdown la ejecute.

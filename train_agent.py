@@ -29,9 +29,8 @@ def make_env():
     máscara de acciones válidas a la red neuronal.
     """
 
-    # Definimos al rival, con un equipo aleatorio y el formato de batalla.
-    selected_team = RandomTeamFromPool(OPPONENT_TEAMS)
-    opponent = VGCMaxBasePowerPlayer(battle_format=BATTLE_FORMAT, team=selected_team)
+    # Definimos al rival, de momento no se le asigna equipo.
+    opponent = VGCMaxBasePowerPlayer(battle_format=BATTLE_FORMAT)
 
     # Definimos al bot a entrenar, con el equipo definido en teams.py
     # y el mismo formato de batalla.
@@ -42,9 +41,20 @@ def make_env():
         battle_format=BATTLE_FORMAT,                                                   
         team=USER_TEAM,
         strict=False, # 
-        choose_on_teampreview=True, # 
+        choose_on_teampreview=False, # De momento lo mantenemos en false,se elgirá al azar.
+                                     # Es una parte nueva y frágil de poke-env.
+                                     # Se tratará más adelante.
     )
 
+    # LIMITACIÓN DE POKE-ENV: PokeEnv.__init__ crea agent1 y agent2 con el
+    # MISMO `team=` (ver self.agent1 = _EnvPlayer(..., team=team) y
+    # self.agent2 = _EnvPlayer(..., team=team) en env.py) — por eso el
+    # rival siempre acababa jugando con una copia de USER_TEAM, por mucho
+    # que le pasáramos otro equipo a `opponent` (ese objeto solo decide
+    # movimientos, no gestiona su propia conexión). Sobreescribimos aquí
+    # el equipo real de agent2 directamente, ya con el entorno construido.
+    base_env.agent2._team = RandomTeamFromPool(OPPONENT_TEAMS)
+    
     # Función de poke-env que se encarga de pedirle al oponente sus acciones automáticamente,
     # para que el agente pueda centrarse solo en su propio equipo.
     env = SingleAgentWrapper(base_env, opponent) 

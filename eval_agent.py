@@ -8,8 +8,6 @@ Uso:
 
 import argparse
 import asyncio
-import sqlite3
-import time
 from pathlib import Path
 
 import numpy as np
