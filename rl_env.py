@@ -55,6 +55,17 @@ class ChampionsDoublesEnv(DoublesEnv):
 
         self.last_opp_hp = {}  # Para rastrear la vida rival del turno anterior
 
+    def reset(self, *args, **kwargs):
+        """
+        El mismo objeto de entorno juega muchas partidas seguidas durante el
+        entrenamiento. Sin este reset,last_opp_hp seguía teniendo el HP final
+        de la partida ANTERIOR, así que en el primer turno de cada partida nueva
+        se comparaba ese HP residual contra el 100% inicial real, generando una 
+        recompensa falsa (un pico de "daño causado" que nunca ocurrió).
+        """
+        self.last_opp_hp = {}
+        return super().reset(*args, **kwargs)
+
     # -------------------------------------------------------------------
     # MÉTODOS PARA TEAM PREVIEW
     # -------------------------------------------------------------------

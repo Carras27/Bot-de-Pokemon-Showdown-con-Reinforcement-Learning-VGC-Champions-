@@ -39,10 +39,10 @@ def make_env():
     # choose_on_teampreview=True La red neuronal también está obligada
     # a elegir el orden de salida en el preview, no solo los movimientos.
     base_env = ChampionsDoublesEnv(
-        battle_format=BATTLE_FORMAT,
+        battle_format=BATTLE_FORMAT,                                                   
         team=USER_TEAM,
         strict=False, # 
-        choose_on_teampreview=False, # 
+        choose_on_teampreview=True, # 
     )
 
     # Función de poke-env que se encarga de pedirle al oponente sus acciones automáticamente,
