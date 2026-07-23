@@ -1,8 +1,6 @@
 """
 Entorno de RL (Gymnasium) para Pokémon Champions VGC (dobles), usando la
-API actual de poke-env: PokeEnv / DoublesEnv. Sustituye a Gen9EnvSinglePlayer,
-que ya no existe en poke-env >= 0.9 aprox (y que además era solo para
-singles, no dobles).
+API de poke-env: PokeEnv / DoublesEnv.
 """
 
 import numpy as np
@@ -333,17 +331,23 @@ def repair_conflicting_switches(action, mask):
     """
     Evita que los dos slots pidan cambiar al MISMO Pokémon de banca, 
     sustituyendo el segundo slot por otra opción válida.
+    Además, repara que los dos slots pidan 'pass' al mismo tiempo. Esto solo tendría sentido
+    si ninguno de los dos pokémon pudiese actuar, cosa que no pasa en una partida real.
     """
     original_dtype = np.asarray(action).dtype
     action = list(action)
     a0, a1 = int(action[0]), int(action[1])
     is_switch0 = 1 <= a0 < 7
     is_switch1 = 1 <= a1 < 7
+
+    
+    half = len(mask) // 2
+    slot1_mask = mask[half:]
+
+    conflict_same_switch = is_switch0 and is_switch1 and a0 == a1
+    conflict_double_pass = a0 == 0 and a1 == 0
  
-    if is_switch0 and is_switch1 and a0 == a1:
-        half = len(mask) // 2
-        slot1_mask = mask[half:]
- 
+    if conflict_same_switch:
         alt_switches = [i for i in range(1, 7) if i < len(slot1_mask) and slot1_mask[i] and i != a1]
         if alt_switches:
             action[1] = alt_switches[0]
@@ -353,7 +357,12 @@ def repair_conflicting_switches(action, mask):
                 action[1] = alternatives[0]
             # Si tampoco hay alternativa, se deja como está: strict=False
             # se encarga de ese caso extremo (no debería darse casi nunca).
-
+    elif conflict_double_pass:
+        alternatives = [i for i, valid in enumerate(slot1_mask) if valid and i != 0]
+        if alternatives:
+            action[1] = alternatives[0]
+        # Si tampoco hay alternativa (caso extremo), se deja como está.
+ 
     # IMPORTANTE: poke-env llama a action[i].item() esperando un escalar de
     # numpy, no un int de Python normal — por eso se devuelve como array,
     # no como lista, conservando el dtype original.

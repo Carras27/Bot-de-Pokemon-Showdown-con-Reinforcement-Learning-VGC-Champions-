@@ -237,8 +237,10 @@ def _extract_chosen_moves(active_list, order) -> dict:
         elif hasattr(action_obj, "species"):  # Pokemon (switch)
             chosen[mon.species] = f"switch:{action_obj.species}"
         # Si no se reconoce el tipo de acción, se guarda la representación en string.
-        else:
-            chosen[mon.species] = str(action_obj)
+        elif isinstance(action_obj, str) and action_obj in ("/choose pass", "/choose default"):
+            # pass y default son pasos obligados después de un debilitamiento
+            # no acciones que elija el bot, por eso no se introducirán a la BD.
+            chosen[mon.species] = None
     return chosen
 
 
