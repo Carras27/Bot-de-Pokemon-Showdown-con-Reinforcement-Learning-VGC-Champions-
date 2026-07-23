@@ -58,10 +58,11 @@ class ChampionsDoublesEnv(DoublesEnv):
     def reset(self, *args, **kwargs):
         """
         El mismo objeto de entorno juega muchas partidas seguidas durante el
-        entrenamiento. Sin este reset,last_opp_hp seguía teniendo el HP final
-        de la partida ANTERIOR, así que en el primer turno de cada partida nueva
-        se comparaba ese HP residual contra el 100% inicial real, generando una 
-        recompensa falsa (un pico de "daño causado" que nunca ocurrió).
+        entrenamiento (no se crea uno nuevo por partida). Sin este reset,
+        last_opp_hp seguía teniendo el HP final de la partida ANTERIOR, así
+        que en el primer turno de cada partida nueva se comparaba ese HP
+        residual contra el 100% inicial real, generando una recompensa
+        falsa (un pico de "daño causado" que nunca ocurrió).
         """
         self.last_opp_hp = {}
         return super().reset(*args, **kwargs)
@@ -305,9 +306,14 @@ class MaskableEnvWrapper(gym.Wrapper):
     def step(self, action):
         """Ejecuta una acción (movimiento o cambio) en el combate.
 
+        Antes de enviarla al simulador, repara el caso en que los dos
+        slots pidan cambiar al mismo Pokémon de banca (una combinación
+        imposible que ningún jugador real podría plantearse siquiera).
+
         Actualiza la máscara con las acciones legales disponibles para el
         siguiente turno.
         """
+        action = repair_conflicting_switches(action, self._last_mask)
         obs, reward, terminated, truncated, info = self.env.step(action)
         self._last_mask = obs["action_mask"]
         return obs, reward, terminated, truncated, info
@@ -328,6 +334,7 @@ def repair_conflicting_switches(action, mask):
     Evita que los dos slots pidan cambiar al MISMO Pokémon de banca, 
     sustituyendo el segundo slot por otra opción válida.
     """
+    original_dtype = np.asarray(action).dtype
     action = list(action)
     a0, a1 = int(action[0]), int(action[1])
     is_switch0 = 1 <= a0 < 7
@@ -346,6 +353,9 @@ def repair_conflicting_switches(action, mask):
                 action[1] = alternatives[0]
             # Si tampoco hay alternativa, se deja como está: strict=False
             # se encarga de ese caso extremo (no debería darse casi nunca).
- 
-    return action
+
+    # IMPORTANTE: poke-env llama a action[i].item() esperando un escalar de
+    # numpy, no un int de Python normal — por eso se devuelve como array,
+    # no como lista, conservando el dtype original.
+    return np.array(action, dtype=original_dtype)
     
