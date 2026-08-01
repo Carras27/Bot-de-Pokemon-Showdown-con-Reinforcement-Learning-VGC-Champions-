@@ -679,7 +679,6 @@ Level: 50
 - Aurora Veil
 - Protect
 
-
 Scovillain (F) @ Scovillainite 
 Ability: Moody
 EVs: 32 HP / 10 Def / 24 SpD
@@ -689,7 +688,6 @@ Level: 50
 - Giga Drain
 - Rage Powder
 - Protect
-
 
 Lycanroc-Dusk (F) @ Focus Sash 
 Ability: Tough Claws
@@ -701,7 +699,6 @@ Level: 50
 - Accelerock
 - Protect
 
-
 Kingambit (F) @ Black Glasses 
 Ability: Defiant
 EVs: 32 HP / 32 Atk / 2 SpD
@@ -711,7 +708,6 @@ Level: 50
 - Sucker Punch
 - Swords Dance
 - Protect
-
 
 Basculegion (M) @ Life Orb 
 Ability: Adaptability
@@ -723,7 +719,6 @@ Level: 50
 - Last Respects
 - Protect
 
-
 Sneasler (M) @ White Herb 
 Ability: Poison Touch
 EVs: 2 HP / 32 Atk / 32 Spe
@@ -733,5 +728,67 @@ Level: 50
 - Close Combat
 - Poison Jab
 - Protect
-"""]
+"""
+]
 
+"""
+Basculegion (M) @ Choice Scarf  
+Ability: Adaptability  
+Level: 50  
+EVs: 4 HP / 32 Atk / 30 Spe  
+Jolly Nature  
+- Soak  
+- Last Respects  
+- Flip Turn  
+- Wave Crash  
+ 
+Cofagrigus @ Mental Herb  
+Ability: Mummy  
+Level: 50  
+EVs: 31 HP / 5 Def / 30 SpD  
+Calm Nature  
+- Ally Switch  
+- Trick Room  
+- Night Shade  
+- Will-O-Wisp  
+ 
+Kingambit @ Focus Sash  
+Ability: Defiant  
+Level: 50  
+EVs: 32 HP / 32 Atk / 2 SpD  
+Adamant Nature  
+- Sucker Punch  
+- Kowtow Cleave  
+- Iron Head  
+- Protect  
+ 
+Raichu @ Raichunite Y  
+Ability: Lightning Rod  
+Level: 50  
+EVs: 2 HP / 32 SpA / 32 Spe  
+Modest Nature  
+- Zap Cannon  
+- Focus Blast  
+- Discharge  
+- Fake Out  
+ 
+Sceptile-Mega @ Sceptilite  
+Ability: Lightning Rod  
+Level: 50  
+EVs: 9 HP / 32 SpA / 25 Spe  
+Timid Nature  
+- Energy Ball  
+- Dragon Pulse  
+- Earth Power  
+- Protect  
+ 
+Torkoal @ Charcoal  
+Ability: Drought  
+Level: 50  
+EVs: 32 HP / 32 SpA / 2 SpD  
+Quiet Nature  
+- Eruption  
+- Solar Beam  
+- Earth Power  
+- Protect 
+"""

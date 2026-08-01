@@ -24,19 +24,12 @@ DB_DIR.mkdir(exist_ok=True) # Crea el directorio si no existe, para poder guarda
 DB_PATH = DB_DIR / "showdown_stats.db" # Ruta de la base de datos SQLite donde se registrarán los resultados de las batallas.
 DB_LOCK = threading.Lock() # Lock para asegurar que solo un hilo acceda a la base de datos SQLite a la vez, evitando errores de concurrencia.
 
-# Genera las 360 permutaciones posibles para elegir 4 Pokémon de 6 ("1234", "1235", etc.)
-VGC_TEAM_PREVIEW_COMBOS = [
-    "".join(map(str, combo))
-    for combo in itertools.permutations(range(1, 7), 4)
-]
-
 class VGCMaxBasePowerPlayer(MaxBasePowerPlayer):
     """
     Oponente con la heurística de MaxBasePowerPlayer para VGC.
     """
     def teampreview(self, battle):
-        # Elige 4 de los 6 al azar (y marca _selected_in_teampreview
-        # correctamente), en vez de traer siempre los 4 primeros.
+        # Elige 4 de los 6 al azar
         return self.random_teampreview(battle)
 
 class RandomTeamFromPool(Teambuilder):

@@ -29,35 +29,29 @@ def make_env():
     máscara de acciones válidas a la red neuronal.
     """
 
-    # Definimos al rival, de momento no se le asigna equipo.
+    # Definimos al rival. Todavia no le asignamos un equipo.
     opponent = VGCMaxBasePowerPlayer(battle_format=BATTLE_FORMAT)
 
-    # Definimos al bot a entrenar, con el equipo definido en teams.py
-    # y el mismo formato de batalla.
     # strict=False Si se elige una acción ilegal, se reemplaza por una válida, sin crashear.
-    # choose_on_teampreview=True La red neuronal también está obligada
-    # a elegir el orden de salida en el preview, no solo los movimientos.
+    # choose_on_teampreview=True: el Team Preview lo controla la RL.
+    # poke-env reutiliza el mismo step()/action space de siempre: llama 2
+    # veces seguidas, cada una pidiendo 2 Pokémon
     base_env = ChampionsDoublesEnv(
         battle_format=BATTLE_FORMAT,                                                   
         team=USER_TEAM,
-        strict=False, # 
-        choose_on_teampreview=False, # De momento lo mantenemos en false,se elgirá al azar.
-                                     # Es una parte nueva y frágil de poke-env.
-                                     # Se tratará más adelante.
+        strict=False,
+        choose_on_teampreview=False, # El True da errores con el equipo oponente. Lo activaré
+                                     # lo revisaré cuando empiecen los combates contra gente real.
     )
-
-    # LIMITACIÓN DE POKE-ENV: PokeEnv.__init__ crea agent1 y agent2 con el
-    # MISMO `team=` (ver self.agent1 = _EnvPlayer(..., team=team) y
-    # self.agent2 = _EnvPlayer(..., team=team) en env.py) — por eso el
-    # rival siempre acababa jugando con una copia de USER_TEAM, por mucho
-    # que le pasáramos otro equipo a `opponent` (ese objeto solo decide
-    # movimientos, no gestiona su propia conexión). Sobreescribimos aquí
-    # el equipo real de agent2 directamente, ya con el entorno construido.
+    
+    #Sobreescribimos aquí el equipo real de agent2 directamente, ya con el entorno construido.
     base_env.agent2._team = RandomTeamFromPool(OPPONENT_TEAMS)
+    ###base_env.agent2._choose_on_teampreview=False
+    ##base_env.agent1._choose_on_teampreview=True
     
     # Función de poke-env que se encarga de pedirle al oponente sus acciones automáticamente,
     # para que el agente pueda centrarse solo en su propio equipo.
-    env = SingleAgentWrapper(base_env, opponent) 
+    env = SingleAgentWrapper(base_env, opponent)
 
     # Envolvemos el entorno en MaskableEnvWrapper para exponer
     # la máscara de acciones válidas a la red neuronal.

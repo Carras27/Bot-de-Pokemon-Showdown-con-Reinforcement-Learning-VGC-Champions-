@@ -1,22 +1,17 @@
 """
 Entorno de RL (Gymnasium) para Pokémon Champions VGC (dobles), usando la
-API de poke-env: PokeEnv / DoublesEnv.
+API actual de poke-env: PokeEnv / DoublesEnv. Sustituye a Gen9EnvSinglePlayer,
+que ya no existe en poke-env >= 0.9 aprox (y que además era solo para
+singles, no dobles).
 """
 
 import numpy as np
-import itertools
 import gymnasium as gym
 
 from gymnasium.spaces import Box
 from poke_env.environment.doubles_env import DoublesEnv # API para combates dobles
 from poke_env.battle.pokemon_type import PokemonType
 from poke_env.ps_client.account_configuration import AccountConfiguration
-
-# Genera las 360 combinaciones posibles de team preview en VGC ("1234", "1235", "2143", etc.)
-VGC_TEAM_PREVIEW_COMBOS = [
-    "".join(map(str, combo))
-    for combo in itertools.permutations(range(1, 7), 4)
-]
 
 # Diccionario para mapear los 18 (20?) tipos de Pokémon a un número único (0 a 17 (19?))
 # Creo que son 20 tipos, está el Stellar y el ???
@@ -65,40 +60,15 @@ class ChampionsDoublesEnv(DoublesEnv):
         self.last_opp_hp = {}
         return super().reset(*args, **kwargs)
 
-    # -------------------------------------------------------------------
-    # MÉTODOS PARA TEAM PREVIEW
-    # -------------------------------------------------------------------
-    def teampreview_action_to_string(self, action: int, battle=None) -> str:
-        """
-        Poke-env llama a este método automáticamente durante el turno 0
-        para convertir la acción numérica elegida por la IA en un comando `/team XXXX`.
-        """
-        combo_idx = action % len(VGC_TEAM_PREVIEW_COMBOS)
-        order_str = VGC_TEAM_PREVIEW_COMBOS[combo_idx] # Calcula aleatoriamente el orden de salida de los 4 Pokémon elegidos en Team Preview
-        return f"/team {order_str}"
-
-    def action_masks(self, *args, **kwargs) -> np.ndarray:
-        """
-        Genera la máscara de acciones diferenciando si estamos en Team Preview (Turno 0)
-        o en combate normal (Turnos 1+).
-        """
-        # Obtenemos la batalla actual desde el propio entorno de poke-env
-        battle = getattr(self, "current_battle", None)
-
-        # CASO 1: Turno 0 (Team Preview)
-        if battle and getattr(battle, "teampreview", False):
-            mask = np.zeros(self.action_space.n, dtype=bool)
-            # Habilitamos únicamente las opciones asignadas a Team Preview
-            max_combos = min(len(VGC_TEAM_PREVIEW_COMBOS), self.action_space.n)
-            mask[:max_combos] = True
-            return mask
-
-        # CASO 2: Combate normal
-        # Si DoublesEnv ya provee action_masks, la llamamos; si no, permitimos las acciones del espacio
-        if hasattr(super(), "action_masks"):
-            return super().action_masks(*args, **kwargs)
-
-        return np.ones(self.action_space.n, dtype=bool)
+    # NOTA sobre Team Preview con choose_on_teampreview=True:
+    # No hace falta ningún método especial aquí. poke-env reutiliza el
+    # MISMO step()/action space de siempre: durante el Team Preview llama
+    # a _choose_move(battle) DOS VECES seguidas, cada una esperando que el
+    # modelo elija 2 Pokémon (uno por slot) usando los mismos índices 1-6
+    # que ya se usan para switches normales — no un action space aparte.
+    # get_action_mask() de DoublesEnv ya tiene su propia rama para
+    # battle.teampreview, así que la máscara ya sale correcta sin tocar
+    # nada más aquí.
 
 
 
@@ -317,36 +287,81 @@ class MaskableEnvWrapper(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
     def action_masks(self):
-        """Devuelve la máscara de acciones actual.
+        """
+        Devuelve la máscara de acciones actual.
 
         Método requerido por librerías como `sb3-contrib` para filtrar
         las acciones inválidas antes de que la red neuronal elija una.
-
-        Returns:
-            np.ndarray: Array booleano donde True indica una acción válida.
         """
         return self._last_mask
 
+    def _fix_vgc_mask(self, mask):
+        """
+        Fuerza a False los índices de cambio de los Pokémon que 
+        se quedaron en el banquillo durante el Team Preview.
+        """
+        # Navegamos de forma segura por laJerarquía de wrappers hasta el entorno base
+        env_base = self.env
+        while hasattr(env_base, "env"):
+            if hasattr(env_base, "current_battle"):
+                break
+            env_base = env_base.env
+            
+        battle = getattr(env_base, "current_battle", None)
+        if not battle and hasattr(self.env, "agent1"):
+            # Por si acaso el entorno base de poke-env está expuesto en agent1 o similar
+            battle = getattr(self.env, "battle", None)
+
+        # Si el combate no ha empezado o sigue en teampreview, no tocamos nada
+        if not battle or battle.teampreview:
+            return mask
+
+        # En poke-env, los índices del 1 al 6 corresponden estrictamente
+        # al orden original de los Pokémon en battle.team
+        team_list = list(battle.team.values())
+        
+        valid_indices = []
+        for i, mon in enumerate(team_list):
+            # Comprobamos si el Pokémon fue seleccionado para entrar al combate
+            if getattr(mon, "_selected_in_teampreview", False):
+                valid_indices.append(i + 1) # +1 porque la acción 0 es 'pass'
+
+        # La máscara contiene las acciones del slot 1 seguidas por las del slot 2
+        half = len(mask) // 2
+        
+        # Desactivamos los índices (1 a 6) de los Pokémon baneados en ambas mitades
+        for offset in [0, half]:
+            for i in range(1, 7):
+                if i not in valid_indices:
+                    mask[offset + i] = False
+
+        return mask
+
+
 def repair_conflicting_switches(action, mask):
     """
-    Evita que los dos slots pidan cambiar al MISMO Pokémon de banca, 
-    sustituyendo el segundo slot por otra opción válida.
-    Además, repara que los dos slots pidan 'pass' al mismo tiempo. Esto solo tendría sentido
-    si ninguno de los dos pokémon pudiese actuar, cosa que no pasa en una partida real.
+        Repara dos combinaciones de acción imposibles en la práctica, que un
+        jugador real nunca podría plantearse:
+        1. Los dos slots piden cambiar al MISMO Pokémon de banca.
+        2. Los dos slots piden "pass" a la vez (debe haber siempre al menos
+           una acción real; "pass" en los dos solo tendría sentido si ninguno
+           de los dos Pokémon pudiera actuar, algo que no ocurre en la práctica).
+        En ambos casos se sustituye el segundo slot por otra opción válida de
+        su propia máscara.
     """
+        
     original_dtype = np.asarray(action).dtype
     action = list(action)
     a0, a1 = int(action[0]), int(action[1])
     is_switch0 = 1 <= a0 < 7
     is_switch1 = 1 <= a1 < 7
 
-    
     half = len(mask) // 2
     slot1_mask = mask[half:]
 
     conflict_same_switch = is_switch0 and is_switch1 and a0 == a1
     conflict_double_pass = a0 == 0 and a1 == 0
- 
+
     if conflict_same_switch:
         alt_switches = [i for i in range(1, 7) if i < len(slot1_mask) and slot1_mask[i] and i != a1]
         if alt_switches:
@@ -362,9 +377,8 @@ def repair_conflicting_switches(action, mask):
         if alternatives:
             action[1] = alternatives[0]
         # Si tampoco hay alternativa (caso extremo), se deja como está.
- 
+
     # IMPORTANTE: poke-env llama a action[i].item() esperando un escalar de
     # numpy, no un int de Python normal — por eso se devuelve como array,
     # no como lista, conservando el dtype original.
     return np.array(action, dtype=original_dtype)
-    
