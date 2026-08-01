@@ -15,7 +15,7 @@ from stable_baselines3.common.monitor import Monitor
 
 from rl_env import ChampionsDoublesEnv, MaskableEnvWrapper
 from showdown_utils import VGCMaxBasePowerPlayer, RandomTeamFromPool
-from teams import USER_TEAM, OPPONENT_TEAMS
+from teams import USER_TEAMS, OPPONENT_TEAMS
 
 BATTLE_FORMAT = "gen9championsvgc2026regmb" # Formato VGC Champions 2026 (dobles) Reglamento M-B
 MODEL_NAME = "ppo_pokemon_bot" # Nombre del archivo donde se guardará el modelo entrenado
@@ -32,22 +32,23 @@ def make_env():
     # Definimos al rival. Todavia no le asignamos un equipo.
     opponent = VGCMaxBasePowerPlayer(battle_format=BATTLE_FORMAT)
 
+    # Escoge un equipo aleatorio de entre los disponibles
+    user_team = RandomTeamFromPool(USER_TEAMS)
+    
     # strict=False Si se elige una acción ilegal, se reemplaza por una válida, sin crashear.
     # choose_on_teampreview=True: el Team Preview lo controla la RL.
     # poke-env reutiliza el mismo step()/action space de siempre: llama 2
     # veces seguidas, cada una pidiendo 2 Pokémon
     base_env = ChampionsDoublesEnv(
         battle_format=BATTLE_FORMAT,                                                   
-        team=USER_TEAM,
+        team=user_team,
         strict=False,
         choose_on_teampreview=False, # El True da errores con el equipo oponente. Lo activaré
                                      # lo revisaré cuando empiecen los combates contra gente real.
     )
     
-    #Sobreescribimos aquí el equipo real de agent2 directamente, ya con el entorno construido.
+    # Sobreescribimos aquí el equipo real de agent2 directamente, ya con el entorno construido.
     base_env.agent2._team = RandomTeamFromPool(OPPONENT_TEAMS)
-    ###base_env.agent2._choose_on_teampreview=False
-    ##base_env.agent1._choose_on_teampreview=True
     
     # Función de poke-env que se encarga de pedirle al oponente sus acciones automáticamente,
     # para que el agente pueda centrarse solo en su propio equipo.

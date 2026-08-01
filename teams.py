@@ -2,7 +2,7 @@
 
 # Habrá un solo equipo USER_TEAM, que es el que entrenaremos y evaluaremos.
 # Se puede cambiar a cualquier otro equipo válido de Showdown.
-USER_TEAM = """
+USER_TEAMS = ["""
 Aerodactyl @ Aerodactylite  
 Ability: Unnerve  
 Level: 50  
@@ -54,7 +54,7 @@ Calm Nature
 - Roar  
 
 Primarina @ Mystic Water  
-Ability: Torrent  
+Ability: Liquid Voice  
 Level: 50  
 EVs: 32 HP / 32 SpA / 2 Spe  
 Modest Nature  
@@ -62,7 +62,68 @@ Modest Nature
 - Aqua Jet  
 - Flip Turn  
 - Moonblast  
+""",
 """
+Aerodactyl @ Aerodactylite  
+Ability: Unnerve  
+Level: 50  
+EVs: 2 HP / 32 Atk / 32 Spe  
+Jolly Nature  
+- Protect  
+- Dual Wingbeat  
+- Rock Slide  
+- Tailwind  
+
+Aegislash @ Spell Tag
+Ability: Stance Change  
+Level: 50  
+EVs: 32 HP / 32 Atk / 2 Def  
+Adamant Nature  
+- Poltergeist 
+- Iron Head
+- King's Shield
+- Shadow Sneak
+
+Gyarados @ Focus Sash  
+Ability: Intimidate  
+Level: 50  
+EVs: 2 HP / 32 Atk / 32 Spe  
+Jolly Nature  
+- Waterfall  
+- Earthquake  
+- Ice Fang  
+- Dragon Dance  
+
+Hippowdon @ Sitrus Berry  
+Ability: Sand Stream  
+Level: 50  
+EVs: 32 HP / 32 Def / 2 SpD  
+Impish Nature  
+- Earthquake  
+- Slack Off  
+- Yawn  
+- Stealth Rock  
+
+Archaludon @ Leftovers  
+Ability: Stamina  
+Level: 50  
+EVs: 32 HP / 2 Def / 32 SpD  
+Calm Nature  
+- Thunderbolt  
+- Draco Meteor  
+- Stealth Rock  
+- Roar  
+
+Primarina @ Mystic Water  
+Ability: Liquid Voice  
+Level: 50  
+EVs: 32 HP / 32 SpA / 2 Spe  
+Modest Nature  
+- Sparkling Aria  
+- Aqua Jet  
+- Flip Turn  
+- Moonblast
+"""]
 # Se guardarán varios equipos de oponentes en OPPONENT_TEAMS,
 # y el agente entrenará y evaluará contra un equipo elegido aleatoriamente de este diccionario.
 OPPONENT_TEAMS = [
@@ -619,7 +680,7 @@ Timid Nature
 - Roar  
 
 Raichu @ Raichunite Y  
-Ability: LIghtning Rod  
+Ability: Lightning Rod  
 Level: 50  
 EVs: 30 HP / 13 Def / 23 Spe  
 Timid Nature  
@@ -728,67 +789,300 @@ Level: 50
 - Close Combat
 - Poison Jab
 - Protect
+""",
 """
-]
+Garchomp @ Life Orb
+Level: 50
+Ability: Rough Skin
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Swords Dance
+- Scale Shot
+- Earthquake
+- Rock Slide
 
+Eelektross-Mega @ Eelektrossite  
+Ability: Levitate  
+Level: 50  
+EVs: 29 HP / 5 SpA / 32 SpD  
+Quiet Nature  
+- Flamethrower  
+- Discharge  
+- Thunderbolt  
+- Rock Tomb  
+
+Talonflame @ Sharp Beak  
+Ability: Gale Wings  
+Level: 50  
+EVs: 2 HP / 32 Atk / 32 Spe  
+Jolly Nature  
+- Brave Bird  
+- Flare Blitz  
+- Quick Guard  
+- Tailwind  
+
+Metagross @ Metagrossite
+Level: 50
+Ability: Clear Body
+EVs: 2 HP / 32 Atk / 32 Spe
+Jolly Nature
+- Psychic Fangs
+- Ice Punch
+- Earthquake
+- Bullet Punch
+
+Sylveon @ Fairy Feather
+Level: 50
+Ability: Pixilate
+EVs: 32 HP / 2 Def / 32 SpA
+Modest Nature
+- Hyper Voice
+- Detect
+- Quick Attack
+- Hyper Beam
+
+Hydreigon @ Choice Scarf
+Level: 50
+Ability: Levitate
+EVs: 2 HP / 32 SpA / 32 Spe
+Modest Nature
+- Dark Pulse
+- Draco Meteor
+- Earth Power
+- Snarl
+""",
 """
-Basculegion (M) @ Choice Scarf  
+Basculegion (M) @ Choice Scarf
+Ability: Adaptability
+Level: 50
+EVs: 4 HP / 32 Atk / 30 Spe
+Jolly Nature
+- Soak
+- Last Respects
+- Flip Turn
+- Wave Crash
+
+Cofagrigus @ Mental Herb
+Ability: Mummy
+Level: 50
+EVs: 31 HP / 5 Def / 30 SpD
+Calm Nature
+- Ally Switch
+- Trick Room
+- Night Shade
+- Will-O-Wisp
+
+Kingambit @ Focus Sash
+Ability: Defiant
+Level: 50
+EVs: 32 HP / 32 Atk / 2 SpD
+Adamant Nature
+- Sucker Punch
+- Kowtow Cleave
+- Iron Head
+- Protect
+
+Raichu @ Raichunite Y
+Ability: Lightning Rod
+Level: 50
+EVs: 2 HP / 32 SpA / 32 Spe
+Modest Nature
+- Zap Cannon
+- Focus Blast
+- Discharge
+- Fake Out
+
+Sceptile @ Sceptilite
+Ability: Lightning Rod
+Level: 50
+EVs: 9 HP / 32 SpA / 25 Spe
+Timid Nature
+- Energy Ball
+- Dragon Pulse
+- Earth Power
+- Protect
+
+Torkoal @ Charcoal
+Ability: Drought
+Level: 50
+EVs: 32 HP / 32 SpA / 2 SpD
+Quiet Nature
+- Eruption
+- Solar Beam
+- Earth Power
+- Protect
+""",
+"""
+Raichu @ Raichunite Y
+Ability: Lightning Rod
+Level: 50
+EVs: 2 HP / 32 SpA / 32 Spe
+Modest Nature
+- Zap Cannon
+- Focus Blast
+- Discharge
+- Fake Out
+
+Sinistcha @ Leftovers
+Ability: Hospitality
+EVs: 32 HP / 14 Def / 20 SpD
+Bold Nature
+- Matcha Gotcha
+- Life Dew
+- Protect
+- Rage Powder
+
+Blastoise @ Blastoisinite
+Ability: Rain Dish
+EVs: 1 HP / 1 Def / 32 SpA / 32 Spe
+Modest Nature
+- Dark Pulse
+- Protect
+- Shell Smash
+- Water Spout
+
+Snorlax @ Sitrus Berry
+Ability: Thick Fat
+EVs: 32 HP / 2 Atk / 32 Def
+Relaxed Nature
+- Belly Drum
+- Protect
+- Earthquake
+- Ice Punch
+
+Hatterene @ Life Orb
+Ability: Magic Bounce
+EVs: 32 HP / 2 Def / 32 SpA
+Quiet Nature
+- Dazzling Gleam
+- Trick Room
+- Protect
+- Psychic
+
+Pelipper @ Damp Rock
+Ability: Drizzle
+EVs: 2 HP / 32 SpA / 32 Spe
+Modest Nature
+- Hurricane
+- Tailwind
+- Weather Ball
+- Wide Guard
+""",
+"""
+Farigiraf @ Colbur Berry
+Ability: Armor Tail
+EVs: 30 HP / 24 Def / 12 SpD
+Bold Nature
+- Trick Room
+- Thunderbolt
+- Dazzling Gleam
+- Psychic
+
+Feraligatr @ Feraligite
+Ability: Sheer Force
+EVs: 2 HP / 32 Atk / 32 Spe
+Adamant Nature
+- Liquidation
+- Swords Dance
+- Protect
+- Body Slam
+
+Incineroar @ Sitrus Berry 
+Ability: Intimidate
+EVs: 32 HP / 20 Def / 12 SpD / 2 Spe
+Careful Nature
+Level: 50
+- Fake Out
+- Flare Blitz
+- Parting Shot
+- Darkest Lariat
+
+Primarina @ Life Orb
+Ability: Liquid Voice
+EVs: 32 HP / 2 Def / 32 SpA
+Modest Nature
+- Hyper Voice
+- Moonblast
+- Protect
+- Flip Turn
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+EVs: 2 HP / 32 SpA / 32 Spe
+Timid Nature
+- Sleep Powder
+- Hurricane
+- Rage Powder
+- Protect
+
+Runerigus @ Leftovers
+Ability: Wandering Spirit
+EVs: 32 HP / 32 Def / 2 SpD
+Sassy Nature
+- Trick Room
+- Earthquake
+- Poltergeist
+- Will-O-Wisp
+""",
+"""
+Grimmsnarl (M) @ Light Clay  
+Ability: Prankster  
+Level: 50  
+EVs: 32 HP / 17 Def / 17 SpD  
+Adamant Nature  
+- Light Screen  
+- Reflect  
+- Spirit Break  
+- Parting Shot  
+
+Venusaur @ Venusaurite  
+Ability: Chlorophyll  
+Level: 50  
+EVs: 2 HP / 32 Def / 32 SpD  
+Modest Nature  
+- Giga Drain  
+- Leech Seed  
+- Sludge Bomb  
+- Acid Spray  
+
+Whimsicott @ Focus Sash  
+Ability: Prankster  
+Level: 50  
+EVs: 32 SpA / 32 Spe  
+Timid Nature  
+- Moonblast  
+- Protect  
+- Tailwind  
+- Encore  
+
+Charizard @ Charizardite Y  
+Ability: Solar Power  
+Level: 50  
+EVs: 14 HP / 32 SpA / 20 Spe  
+Modest Nature  
+- Air Slash  
+- Heat Wave  
+- Protect  
+- Flamethrower  
+
+Basculegion (M) @ Life Orb  
 Ability: Adaptability  
 Level: 50  
-EVs: 4 HP / 32 Atk / 30 Spe  
+EVs: 2 HP / 32 Atk / 32 Spe  
 Jolly Nature  
-- Soak  
-- Last Respects  
-- Flip Turn  
 - Wave Crash  
- 
-Cofagrigus @ Mental Herb  
-Ability: Mummy  
-Level: 50  
-EVs: 31 HP / 5 Def / 30 SpD  
-Calm Nature  
-- Ally Switch  
-- Trick Room  
-- Night Shade  
-- Will-O-Wisp  
- 
-Kingambit @ Focus Sash  
-Ability: Defiant  
-Level: 50  
-EVs: 32 HP / 32 Atk / 2 SpD  
-Adamant Nature  
-- Sucker Punch  
-- Kowtow Cleave  
-- Iron Head  
+- Last Respects  
 - Protect  
- 
-Raichu @ Raichunite Y  
-Ability: Lightning Rod  
+- Flip Turn  
+
+Goodra-Hisui @ Leftovers  
+Ability: Gooey  
 Level: 50  
-EVs: 2 HP / 32 SpA / 32 Spe  
+EVs: 32 HP / 32 SpA  
 Modest Nature  
-- Zap Cannon  
-- Focus Blast  
-- Discharge  
-- Fake Out  
- 
-Sceptile-Mega @ Sceptilite  
-Ability: Lightning Rod  
-Level: 50  
-EVs: 9 HP / 32 SpA / 25 Spe  
-Timid Nature  
-- Energy Ball  
 - Dragon Pulse  
-- Earth Power  
+- Flash Cannon  
 - Protect  
- 
-Torkoal @ Charcoal  
-Ability: Drought  
-Level: 50  
-EVs: 32 HP / 32 SpA / 2 SpD  
-Quiet Nature  
-- Eruption  
-- Solar Beam  
-- Earth Power  
-- Protect 
-"""
+- Draco Meteor  
+"""]
+

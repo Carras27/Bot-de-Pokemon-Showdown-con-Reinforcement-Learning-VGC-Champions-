@@ -17,7 +17,6 @@ from pathlib import Path
 from poke_env.data import to_id_str
 from poke_env.player import Player, MaxBasePowerPlayer
 from poke_env.teambuilder import Teambuilder
-from teams import USER_TEAM, OPPONENT_TEAMS
 
 DB_DIR = Path(__file__).parent / "database" # Ruta del directorio donde se guardará la base de datos SQLite con las estadísticas de Showdown.
 DB_DIR.mkdir(exist_ok=True) # Crea el directorio si no existe, para poder guardar la base de datos.
@@ -57,13 +56,25 @@ class _TeamParser(Teambuilder):
 _team_parser = _TeamParser()
 
 
-def compute_team_fingerprint(team_export: str) -> tuple[str, list[str]]:
+def compute_team_fingerprint(team_input) -> tuple[str, list[str]]:
     """
-    A partir del texto 'Export' de un equipo, calcula:
+    A partir del texto 'Export' de un equipo, una lista o un pool, calcula:
     - team_id: hash corto del equipo ya normalizado.
     - roster: lista de las especies del equipo (para saber qué 6 Pokémon
       tiene disponibles ese team_id).
     """
+    
+    # Normalizamos la entrada a un string de Showdown
+    if hasattr(team_input, "yield_team"):
+        # Si es un objeto RandomTeamFromPool, le pedimos que genere un equipo
+        team_export = team_input.yield_team()
+    elif isinstance(team_input, list):
+        # Si se le pasa directamente la colección USER_TEAMS (lista)
+        team_export = random.choice(team_input)
+    else:
+        # Si ya es el texto normal de un equipo, lo mantenemos
+        team_export = str(team_input)
+
     # Parsea y normaliza el equipo,
     # así dos equipos con el mismo contenido pero distinto orden o formato dan el mismo team_id.
     parsed = _team_parser.parse_showdown_team(team_export)
@@ -77,7 +88,8 @@ def compute_team_fingerprint(team_export: str) -> tuple[str, list[str]]:
         to_id_str(getattr(mon, "species", None) or getattr(mon, "nickname", None))
         for mon in parsed
     )
-    return team_id, roster
+    
+    return team_id, roster, team_export
 
 
 def init_db(db_path: Path) -> sqlite3.Connection:
@@ -162,22 +174,34 @@ def init_db(db_path: Path) -> sqlite3.Connection:
 
 
 def ensure_team_registered(
-    conn: sqlite3.Connection, team_id: str, team_export: str, roster: list[str]
-    ) -> bool:
+    conn: sqlite3.Connection, team_id: str, team_export, roster: list[str]
+) -> bool:
     """Da de alta el equipo en la tabla `teams` si no existía. Devuelve
     True si era un equipo NUEVO, False si ya se había jugado antes."""
+    
+    # Normalizamos la entrada a string para guardarla correctamente en BD
+    if hasattr(team_export, "yield_team"):
+        team_str = team_export.yield_team()
+    elif isinstance(team_export, list):
+        team_str = random.choice(team_export)
+    else:
+        team_str = str(team_export)
+
     # Se asegura de que solo un hilo acceda a la base de datos a la vez.
     with DB_LOCK:
         # Comprueba si el team_id ya existe en la tabla `teams`.
         existing = conn.execute(
             "SELECT team_id FROM teams WHERE team_id = ?", (team_id,)
         ).fetchone()
+        
         # Si ya existía, devuelve False. Si no existía, lo inserta y devuelve True.
         if existing is not None:
             return False
+            
+        # Insertamos el team_str extraído en lugar del objeto original
         conn.execute(
             "INSERT INTO teams (team_id, team_export, roster, first_seen) VALUES (?, ?, ?, ?)",
-            (team_id, team_export, json.dumps(roster), time.time()),
+            (team_id, team_str, json.dumps(roster), time.time()),
         )
         conn.commit()
         return True

@@ -22,7 +22,7 @@ from showdown_utils import (
     ensure_team_registered,
     init_db,
 )
-from teams import USER_TEAM, OPPONENT_TEAMS
+from teams import USER_TEAMS, OPPONENT_TEAMS
 
 DB_PATH = Path(__file__).parent / "database" / "showdown_stats.db" # Ruta de la base de datos SQLite donde se registrarán los resultados de las batallas.
 MODEL_NAME = "ppo_pokemon_bot" # Nombre del fichero donde se guardó el modelo entrenado.
@@ -88,18 +88,20 @@ async def main(n_battles: int):
     model = MaskablePPO.load(MODEL_NAME)
     print(f"--- Este modelo lleva {model.num_timesteps} pasos entrenados ---")
 
+    # Elige un equipo aleatorio para usuario y rival
+    opponent_pool = RandomTeamFromPool(OPPONENT_TEAMS)
+    user_pool = RandomTeamFromPool(USER_TEAMS)
+    
     # Se asegura de que el equipo del agente esté registrado en la base de datos,
     #  y si no lo está, lo registra.
-    team_id, roster = compute_team_fingerprint(USER_TEAM)
-    is_new = ensure_team_registered(conn, team_id, USER_TEAM, roster)
+    team_id, roster, team_string = compute_team_fingerprint(user_pool)
+    is_new = ensure_team_registered(conn, team_id, team_string, roster)
     if is_new:
         print(f"--- Nuevo equipo registrado en la BD ---")
     else:
         print(f"--- Equipo ya conocido, sumando batallas ---")
 
-    # Elige un equipo rival aleatorio del pool de OPPONENT_TEAMS
-    #  y lo registra en la base de datos si es nuevo.
-    opponent_pool = RandomTeamFromPool(OPPONENT_TEAMS)
+    
 
     # Configura el oponente, su heurística, equipo, formato
     # y la conexión a la base de datos para registrar los resultados.
@@ -115,7 +117,7 @@ async def main(n_battles: int):
     bot = RLPlayerWrapper(
         model=model,
         battle_format=BATTLE_FORMAT,
-        team=USER_TEAM,
+        team=team_string,
         max_concurrent_battles=1,
         db_conn=conn,
         team_id=team_id,
