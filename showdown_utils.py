@@ -273,6 +273,14 @@ class LoggingPlayer(Player):
         self.db_conn = db_conn # Conexión a la base de datos SQLite para registrar estadísticas.
         self.team_id = team_id # Identificador del equipo del jugador.
         self._revealed_active: dict[str, dict[str, set]]= {}
+        # battle_tags que ya se registraron en la tabla `battles`. Necesario
+        # porque self.battles acumula TODAS las partidas jugadas por esta
+        # instancia desde que se creó, no solo las nuevas — sin este
+        # tracking, log_finished_battles() volvería a grabar partidas ya
+        # registradas usando el team_id ACTUAL (el de la partida más
+        # reciente), sobreescribiendo el team_id correcto de partidas
+        # anteriores jugadas con otro equipo.
+        self._logged_battle_tags: set[str] = set()
 
     # Elige 4 de los 6 Pokémon al azar para la preview de VGC (y marca
     # _selected_in_teampreview correctamente en cada uno).
@@ -407,6 +415,13 @@ class LoggingPlayer(Player):
     def log_finished_battles(self):
         with DB_LOCK: # Se asegura de que solo un hilo acceda a la base de datos a la vez.
             for battle_tag, battle in self.battles.items():
+                if battle_tag in self._logged_battle_tags:
+                    # Ya se registró en una llamada anterior — si la
+                    # procesáramos otra vez, se grabaría con el team_id
+                    # ACTUAL (el de la partida más reciente), no con el
+                    # que tenía cuando se jugó de verdad.
+                    continue
+
                 # Extrae los Pokémon que se han revelado durante la batalla 
                 # (propios y del oponente).
                 seen = self._revealed_active.get(battle_tag, {"own": set(), "opponent": set()})
@@ -432,6 +447,7 @@ class LoggingPlayer(Player):
                         time.time(),
                     ),
                 )
+                self._logged_battle_tags.add(battle_tag)
             self.db_conn.commit()
 
 

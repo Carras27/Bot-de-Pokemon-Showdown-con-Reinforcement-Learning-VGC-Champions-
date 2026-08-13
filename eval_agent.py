@@ -8,9 +8,11 @@ Uso:
 
 import argparse
 import asyncio
+import random
 from pathlib import Path
 
 import numpy as np
+from poke_env.teambuilder import ConstantTeambuilder
 from sb3_contrib import MaskablePPO
 
 from rl_env import ChampionsDoublesEnv
@@ -88,48 +90,48 @@ async def main(n_battles: int):
     model = MaskablePPO.load(MODEL_NAME)
     print(f"--- Este modelo lleva {model.num_timesteps} pasos entrenados ---")
 
-    # Elige un equipo aleatorio para usuario y rival
-    opponent_pool = RandomTeamFromPool(OPPONENT_TEAMS)
-    user_pool = RandomTeamFromPool(USER_TEAMS)
-    
-    # Se asegura de que el equipo del agente esté registrado en la base de datos,
-    #  y si no lo está, lo registra.
-    team_id, roster, team_string = compute_team_fingerprint(user_pool)
-    is_new = ensure_team_registered(conn, team_id, team_string, roster)
-    if is_new:
-        print(f"--- Nuevo equipo registrado en la BD ---")
-    else:
-        print(f"--- Equipo ya conocido, sumando batallas ---")
-
-    
-
-    # Configura el oponente, su heurística, equipo, formato
-    # y la conexión a la base de datos para registrar los resultados.
+    # Configura el oponente (equipo aleatorio en cada partida, vía
+    # RandomTeamFromPool — poke-env ya pide un equipo nuevo con
+    # yield_team() al empezar cada partida).
     opponent = LoggingMaxBasePowerOpponent(
         battle_format=BATTLE_FORMAT,
-        team=opponent_pool,
+        team=RandomTeamFromPool(OPPONENT_TEAMS),
         max_concurrent_battles=1,
         db_conn=conn,
     )
 
-    # Configura el bot RL, con su modelo entrenado, equipo, formato
-    # y la conexión a la base de datos para registrar los resultados.
+    # Configura el bot RL una sola vez (reutiliza la misma conexión para
+    # todas las partidas); el equipo y el team_id se reasignan ANTES de
+    # cada partida individual, así cada una queda registrada con el
+    # team_id que de verdad se usó en ella.
     bot = RLPlayerWrapper(
         model=model,
         battle_format=BATTLE_FORMAT,
-        team=team_string,
+        team=USER_TEAMS[0],  # placeholder, se sobreescribe abajo antes de jugar
         max_concurrent_battles=1,
         db_conn=conn,
-        team_id=team_id,
     )
 
-    # Inicia las batallas, el bot RL contra el oponente heurístico.
     print("--- El agente RL está combatiendo... ---")
-    await bot.battle_against(opponent, n_battles=n_battles)
+    for i in range(n_battles):
+        # Elige un equipo de usuario al azar para ESTA partida en concreto
+        # y lo registra en la BD con su propio team_id.
+        team_export = random.choice(USER_TEAMS)
+        team_id, roster, team_string = compute_team_fingerprint(team_export)
+        is_new = ensure_team_registered(conn, team_id, team_string, roster)
+        if is_new:
+            print(f"[{i + 1}/{n_battles}] Equipo NUEVO registrado (team_id={team_id})")
+        else:
+            print(f"[{i + 1}/{n_battles}] team_id={team_id}, sumando batallas")
 
-    # Cuando las batallas terminan, registra los resultados en la base de datos
-    # y cierra la conexión.
-    bot.log_finished_battles()
+        bot._team = ConstantTeambuilder(team_string)
+        bot.team_id = team_id
+
+        await bot.battle_against(opponent, n_battles=1)
+        # Se registra inmediatamente tras CADA partida (no al final de
+        # todas), porque el team_id cambia entre partidas.
+        bot.log_finished_battles()
+
     conn.close()
     print("--- Batallas registradas en SQLite ---")
 
