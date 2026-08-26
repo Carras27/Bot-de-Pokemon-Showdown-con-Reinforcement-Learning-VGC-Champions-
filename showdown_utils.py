@@ -19,7 +19,7 @@ from poke_env.data import to_id_str
 from poke_env.player import Player, MaxBasePowerPlayer
 from poke_env.teambuilder import Teambuilder
 
-from rl_env import ChampionsDoublesEnv
+from rl_env import ChampionsDoublesEnv, repair_conflicting_switches
 
 DB_DIR = Path(__file__).parent / "database" # Ruta del directorio donde se guardará la base de datos SQLite con las estadísticas de Showdown.
 DB_DIR.mkdir(exist_ok=True) # Crea el directorio si no existe, para poder guardar la base de datos.
@@ -37,28 +37,28 @@ class VGCMaxBasePowerPlayer(MaxBasePowerPlayer):
 class RLOpponentPlayer(Player):
     """
     Oponente controlado por un modelo MaskablePPO ya entrenado (congelado).
- 
+
     Se usa durante el entrenamiento self-play: en vez de pelear siempre
     contra el mismo heurístico, el agente en entrenamiento se enfrenta a
     versiones pasadas de sí mismo, sacadas del pool de checkpoints. Solo
     hace inferencia (predict), nunca se actualiza — es un "sparring
     partner" fijo durante todo el bloque de entrenamiento en el que se usa.
     """
- 
+
     def __init__(self, model, battle_format, *args, **kwargs):
         super().__init__(*args, battle_format=battle_format, **kwargs)
         self.model = model
- 
+
         # Instancia "ayudante" solo para reutilizar embed_battle/get_action_mask/
         # action_to_order de ChampionsDoublesEnv, sin conectarse a ningún servidor.
         self._helper_env = ChampionsDoublesEnv(
             battle_format=battle_format, start_listening=False
         )
- 
+
     def teampreview(self, battle):
         # Igual que el resto de bots: elige 4 de los 6 al azar en el Team Preview.
         return self.random_teampreview(battle)
- 
+
     def choose_move(self, battle):
         action_mask = np.array(self._helper_env.get_action_mask(battle))
         state = {
@@ -70,6 +70,14 @@ class RLOpponentPlayer(Player):
         # ayuda a que el agente en entrenamiento no se sobre-ajuste a un
         # único patrón de juego de esa versión congelada.
         action, _ = self.model.predict(state, action_masks=action_mask, deterministic=False)
+
+        # MaskableEnvWrapper.step() hace este mismo arreglo para el agente
+        # que se entrena, pero aquí NO pasamos por ese wrapper (este jugador
+        # solo llama al modelo directamente), así que hay que repararlo a
+        # mano: sin esto, dos slots pidiendo cambiar al mismo Pokémon de
+        # banca genera el warning "incompatible! Defaulting to random move".
+        action = repair_conflicting_switches(action, action_mask)
+
         return ChampionsDoublesEnv.action_to_order(action, battle, strict=False)
 
 

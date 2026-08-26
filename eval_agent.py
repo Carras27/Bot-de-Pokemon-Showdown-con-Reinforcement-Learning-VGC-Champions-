@@ -15,7 +15,7 @@ import numpy as np
 from poke_env.teambuilder import ConstantTeambuilder
 from sb3_contrib import MaskablePPO
 
-from rl_env import ChampionsDoublesEnv
+from rl_env import ChampionsDoublesEnv, repair_conflicting_switches
 from showdown_utils import (
     LoggingPlayer,
     LoggingMaxBasePowerOpponent,
@@ -68,6 +68,12 @@ class RLPlayerWrapper(LoggingPlayer):
         # A partir del estado y la máscara, el modelo predice la mejor acción.
         # deterministic=True hace elegir siempre la opción con mayor probabilidad.
         action, _ = self.model.predict(state, action_masks=action_mask, deterministic=True)
+
+        # Repara el caso en que los dos slots pidan cambiar al mismo
+        # Pokémon de banca (combinación imposible en la práctica). Durante
+        # el entrenamiento esto lo hace MaskableEnvWrapper.step(), pero
+        # aquí llamamos al modelo directamente sin pasar por ese wrapper.
+        action = repair_conflicting_switches(action, action_mask)
 
         # Convierte la acción elegida al comando de Showdown corresponidiente.
         # strict=false hace que si la acción elegida es ilegal, se reemplace por una aleatoria válida y no crashear.
