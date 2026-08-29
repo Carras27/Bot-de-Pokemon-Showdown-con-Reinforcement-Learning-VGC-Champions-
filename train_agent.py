@@ -14,8 +14,8 @@ para el SIGUIENTE bloque se sortea el oponente entre:
     robusto contra estilos de juego variados.
 
 Uso:
-    python train_agent.py --timesteps 200000
-    python train_agent.py --timesteps 200000 --chunk-size 20000 --heuristic-prob 0.3
+    python3 train_agent.py --timesteps 200000
+    python3 train_agent.py --timesteps 200000 --chunk-size 20000 --heuristic-prob 0.3
 """
 
 import argparse

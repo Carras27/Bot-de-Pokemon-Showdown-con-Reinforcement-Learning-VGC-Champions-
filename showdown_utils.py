@@ -36,13 +36,10 @@ class VGCMaxBasePowerPlayer(MaxBasePowerPlayer):
 
 class RLOpponentPlayer(Player):
     """
-    Oponente controlado por un modelo MaskablePPO ya entrenado (congelado).
+    Oponente controlado por un modelo MaskablePPO congelado ya entrenado.
 
-    Se usa durante el entrenamiento self-play: en vez de pelear siempre
-    contra el mismo heurístico, el agente en entrenamiento se enfrenta a
-    versiones pasadas de sí mismo, sacadas del pool de checkpoints. Solo
-    hace inferencia (predict), nunca se actualiza — es un "sparring
-    partner" fijo durante todo el bloque de entrenamiento en el que se usa.
+    Se usa durante el entrenamiento self-play: El agente en entrenamiento se enfrenta a
+    versiones pasadas de sí mismo, sacadas del pool de checkpoints.
     """
 
     def __init__(self, model, battle_format, *args, **kwargs):
@@ -68,13 +65,10 @@ class RLOpponentPlayer(Player):
         # deterministic=False: un poco de variedad en las partidas del pool
         # hace que el rival no sea 100% predecible turno a turno, lo cual
         # ayuda a que el agente en entrenamiento no se sobre-ajuste a un
-        # único patrón de juego de esa versión congelada.
+        # único patrón de juego de esa versión.
         action, _ = self.model.predict(state, action_masks=action_mask, deterministic=False)
 
-        # MaskableEnvWrapper.step() hace este mismo arreglo para el agente
-        # que se entrena, pero aquí NO pasamos por ese wrapper (este jugador
-        # solo llama al modelo directamente), así que hay que repararlo a
-        # mano: sin esto, dos slots pidiendo cambiar al mismo Pokémon de
+        # sin esto, dos slots pidiendo cambiar al mismo Pokémon de
         # banca genera el warning "incompatible! Defaulting to random move".
         action = repair_conflicting_switches(action, action_mask)
 
