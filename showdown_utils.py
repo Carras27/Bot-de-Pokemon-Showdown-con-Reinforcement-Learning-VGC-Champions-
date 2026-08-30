@@ -68,7 +68,7 @@ class RLOpponentPlayer(Player):
         # único patrón de juego de esa versión.
         action, _ = self.model.predict(state, action_masks=action_mask, deterministic=False)
 
-        # sin esto, dos slots pidiendo cambiar al mismo Pokémon de
+        #  sin esto, dos slots pidiendo cambiar al mismo Pokémon de
         # banca genera el warning "incompatible! Defaulting to random move".
         action = repair_conflicting_switches(action, action_mask)
 
@@ -102,10 +102,9 @@ _team_parser = _TeamParser()
 
 def compute_team_fingerprint(team_input) -> tuple[str, list[str]]:
     """
-    A partir del texto 'Export' de un equipo, una lista o un pool, calcula:
+    A partir del texto 'Export' de un equipo o una lista, calcula:
     - team_id: hash corto del equipo ya normalizado.
-    - roster: lista de las especies del equipo (para saber qué 6 Pokémon
-      tiene disponibles ese team_id).
+    - roster: lista de las especies del equipo.
     """
     
     # Normalizamos la entrada a un string de Showdown
@@ -113,7 +112,7 @@ def compute_team_fingerprint(team_input) -> tuple[str, list[str]]:
         # Si es un objeto RandomTeamFromPool, le pedimos que genere un equipo
         team_export = team_input.yield_team()
     elif isinstance(team_input, list):
-        # Si se le pasa directamente la colección USER_TEAMS (lista)
+        # Si se le pasa directamente la colección TEAMS (lista)
         team_export = random.choice(team_input)
     else:
         # Si ya es el texto normal de un equipo, lo mantenemos
@@ -127,7 +126,7 @@ def compute_team_fingerprint(team_input) -> tuple[str, list[str]]:
     # Calcula un hash SHA256 del equipo normalizado y lo recorta a 12 caracteres.
     team_id = hashlib.sha256(packed.encode("utf-8")).hexdigest()[:12]
 
-    # Extrae la lista de especies del equipo (roster).
+    # Extrae el roster.
     roster = sorted(
         to_id_str(getattr(mon, "species", None) or getattr(mon, "nickname", None))
         for mon in parsed
@@ -140,8 +139,9 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     """
     Inicializa la base de datos SQLite para registrar estadísticas de Showdown.
     Crea las tablas necesarias si no existen y aplica migraciones si es necesario.
-    Devuelve la conexión a la base de datos.
+    Devuelve la conexión a la base de datos para que pueda ser usada por otros módulos.
     """
+
     # Inicia la conexión a la base de datos SQLite, permitiendo acceso desde múltiples hilos.
     conn = sqlite3.connect(db_path, check_same_thread=False)
     # Configura el modo WAL (Write-Ahead Logging) para permitir concurrencia de lectura/escritura.
@@ -220,8 +220,10 @@ def init_db(db_path: Path) -> sqlite3.Connection:
 def ensure_team_registered(
     conn: sqlite3.Connection, team_id: str, team_export, roster: list[str]
 ) -> bool:
-    """Da de alta el equipo en la tabla `teams` si no existía. Devuelve
-    True si era un equipo NUEVO, False si ya se había jugado antes."""
+    """
+    Da de alta el equipo en la tabla `teams` si no existía. Devuelve
+    True si era un equipo NUEVO, False si ya había jugado antes.
+    """
     
     # Normalizamos la entrada a string para guardarla correctamente en BD
     if hasattr(team_export, "yield_team"):
@@ -253,19 +255,19 @@ def ensure_team_registered(
 
 def _extract_chosen_moves(active_list, order) -> dict:
     """
-    Intento de averiguar qué movimiento (o switch) eligió cada
+    Intento de averiguar qué acción eligió cada
     Pokémon activo, a partir del objeto BattleOrder que devuelve poke-env.
-    Si la estructura interna no coincide con lo esperado (puede variar
-    entre versiones), se guarda None para ese Pokémon en vez de fallar.
+    Si la estructura interna no coincide con lo esperado,
+    se guarda None para ese Pokémon en vez de fallar.
     """
-    # Comprueba si el combate es de dobles, y si es así,
-    # extrae las órdenes de cada Pokémon activo (first and second_order).
+    # Extrae las órdenes de cada Pokémon activo (first and second_order).
     first = getattr(order, "first_order", None)
     second = getattr(order, "second_order", None)
 
+    # Comprueba si el combate es de dobles, es decir, si existen dos ordenes.
     if first is not None or second is not None:
         sub_orders = [first, second]
-    # Si no, comprueba si el objeto order tiene un atributo 'orders' (para triples).
+    # Comprueba si el objeto order tiene un atributo 'orders' (para triples).
     elif hasattr(order, "orders"):
         sub_orders = list(order.orders)
     # Si no se cumple ninguna, se guarda la orden única en una lista (singles).
@@ -276,24 +278,24 @@ def _extract_chosen_moves(active_list, order) -> dict:
     chosen = {}
 
     # Itera sobre los Pokémon activos y las órdenes correspondientes,
-    #  y extrae el movimiento o switch elegido.
+    # y extrae la acción elegida.
     for i, mon in enumerate(active_list):
-        # Si no hay Pokémon activo en esa posición, se guarda None.
+        # Si no hay Pokémon activo en una posición, se guarda None.
         if mon is None:
             continue
 
-        # Obtenemos la sub-orden (orden de un solo pokemon) correspondiente.
+        # Obtenemos la sub-orden correspondiente.
         sub = sub_orders[i] if i < len(sub_orders) else None
 
-        # Extrae el objeto de acción (Move o Pokemon) de la sub-orden.
+        # Extrae el objeto de acción de la sub-orden.
         action_obj = getattr(sub, "order", None) if sub is not None else None
 
         # Dependiendo del tipo de acción, se guarda el id del movimiento,
-        #  el nombre del Pokémon para switch,
-        #  o None si no se pudo determinar.
+        # el nombre del Pokémon para 'switch',
+        # o None si no se pudo determinar.
         if action_obj is None:
             chosen[mon.species] = None
-        elif hasattr(action_obj, "id"):  # Move
+        elif hasattr(action_obj, "id"):  # movimiento
             chosen[mon.species] = action_obj.id
         elif hasattr(action_obj, "species"):  # Pokemon (switch)
             chosen[mon.species] = f"switch:{action_obj.species}"
@@ -326,8 +328,7 @@ class LoggingPlayer(Player):
         # anteriores jugadas con otro equipo.
         self._logged_battle_tags: set[str] = set()
 
-    # Elige 4 de los 6 Pokémon al azar para la preview de VGC (y marca
-    # _selected_in_teampreview correctamente en cada uno).
+    # Elige 4 de los 6 Pokémon al azar durante la preview de VGC.
     def teampreview(self, battle):
         return self.random_teampreview(battle)
 
@@ -338,8 +339,7 @@ class LoggingPlayer(Player):
         self._log_turn(battle, order)
         return order
 
-    # Registra qué Pokémon activos se han revelado en la batalla, para poder guardar
-    #  la lista de Pokémon que participaron en la batalla al final.
+    # Registra qué Pokémon participan en la batalla, ha medida que aparecen.
     def _track_revealed(self, battle):
         # Se asegura de que haya un diccionario para este battle_tag,
         # con sets para "own" y "opponent".
@@ -348,9 +348,9 @@ class LoggingPlayer(Player):
         )
         # Actualiza los sets con las especies de los Pokémon activos en este turno.
         active_raw = battle.active_pokemon
-        # Convierte a lista si es un solo Pokémon (singles) o ya es una lista (doubles).
+        # Convierte a lista si es un solo Pokémon (singles).
         active_list = active_raw if isinstance(active_raw, list) else [active_raw]
-        # Actualiza el set de Pokémon propios revelados con las especies de los Pokémon activos.
+        # Actualiza el set de Pokémon revelados con las especies de los Pokémon activos.
         seen["own"].update(mon.species for mon in active_list if mon is not None)
 
         # Hace lo mismo para los Pokémon activos del oponente.
@@ -365,12 +365,12 @@ class LoggingPlayer(Player):
 
         active_raw = battle.active_pokemon
         active_list = active_raw if isinstance(active_raw, list) else [active_raw]
-        # Convierte la lista de Pokémon activos a una lista de especies (o None si no hay Pokémon).
+        # Convierte la lista de Pokémon activos a una lista de especies (None si no hay Pokémon).
         active = [mon.species if mon else None for mon in active_list]
 
         opp_raw = battle.opponent_active_pokemon
         opp_list = opp_raw if isinstance(opp_raw, list) else [opp_raw]
-        # Convierte la lista de Pokémon activos del oponente a una lista de especies (o None si no hay Pokémon).
+        # Convierte la lista de Pokémon activos del oponente a una lista de especies (None si no hay Pokémon).
         opp_active = [mon.species if mon else None for mon in opp_list]
 
         # Calcula la fracción de HP actual de cada Pokémon del equipo y del oponente.
@@ -418,8 +418,8 @@ class LoggingPlayer(Player):
             else {}
         )
 
-        # Extrae qué movimiento eligió cada Pokémon activo 
-        # (o switch) a partir del objeto BattleOrder.
+        # Extrae qué acción eligió cada Pokémon activo 
+        # a partir del objeto BattleOrder.
         chosen_moves = _extract_chosen_moves(active_list, order)
 
         # Inserta toda la información del turno en la tabla `turns` de la base de datos.
