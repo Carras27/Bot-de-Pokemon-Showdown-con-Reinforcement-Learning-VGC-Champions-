@@ -52,6 +52,7 @@ class RLPlayerWrapper(LoggingPlayer):
     def choose_move(self, battle):
         """
         Se ejecuta cada vez que el bot necesita elegir un movimiento.
+
         """
 
         # Obtiene el array de la máscara de acciones válidas e inválidas.
@@ -70,13 +71,14 @@ class RLPlayerWrapper(LoggingPlayer):
         action, _ = self.model.predict(state, action_masks=action_mask, deterministic=True)
 
         # Repara el caso en que los dos slots pidan cambiar al mismo
-        # Pokémon de banca (combinación imposible en la práctica). Durante
-        # el entrenamiento esto lo hace MaskableEnvWrapper.step(), pero
-        # aquí llamamos al modelo directamente sin pasar por ese wrapper.
+        # Pokémon de banca. Durante el entrenamiento esto lo hace 
+        # MaskableEnvWrapper.step(), pero aquí llamamos al modelo directamente
+        # sin pasar por ese wrapper.
         action = repair_conflicting_switches(action, action_mask)
 
         # Convierte la acción elegida al comando de Showdown corresponidiente.
-        # strict=false hace que si la acción elegida es ilegal, se reemplace por una aleatoria válida y no crashear.
+        # strict=false hace que si la acción elegida es ilegal, se reemplace
+        # por una aleatoria válida y no crashear.
         order = ChampionsDoublesEnv.action_to_order(action, battle, strict=False)
 
         # Llama a la función de LoggingPlayer para registrar la acción elegida en la base de datos.

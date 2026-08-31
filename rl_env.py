@@ -357,11 +357,9 @@ class MaskableEnvWrapper(gym.Wrapper):
 
 def repair_conflicting_switches(action, mask):
     """
-        Repara dos combinaciones de acción imposibles en la práctica, que un
-        jugador real nunca podría plantearse:
+        Repara dos combinaciones de acción imposibles en la práctica:
         1. Los dos slots piden cambiar al MISMO Pokémon de banca.
-        2. Los dos slots piden "pass" a la vez (debe haber siempre al menos
-           una acción real; "pass" en los dos solo tendría sentido si ninguno
+        2. Los dos slots piden "pass" a la vez ("pass" en los dos solo tendría sentido si ninguno
            de los dos Pokémon pudiera actuar, algo que no ocurre en la práctica).
         En ambos casos se sustituye el segundo slot por otra opción válida de
         su propia máscara.
