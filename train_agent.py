@@ -2,13 +2,12 @@
 Entrena (o continúa entrenando) un agente PPO para tu equipo de Pokémon
 Champions VGC, usando SELF-PLAY.
 
-En vez de pelear siempre contra el mismo heurístico, el entrenamiento se
-divide en bloques de `--chunk-size` pasos. Al final de cada bloque se
-guarda el modelo actual como checkpoint en un pool (self_play_pool/), y
-para el SIGUIENTE bloque se sortea el oponente entre:
+El entrenamiento se divide en bloques de `--chunk-size` pasos.
+Al final de cada bloque se guarda el modelo actual como checkpoint
+en un pool (self_play_pool/), y para el SIGUIENTE bloque se sortea el oponente entre:
   - el heurístico MaxBasePower (con probabilidad --heuristic-prob), para
     que el agente no olvide cómo ganarle a un rival simple pero agresivo.
-  - una versión congelada elegida al azar de entre TODO el pool de
+  - una versión congelada elegida al azar de entre todo el pool de
     checkpoints propios (no solo la última), lo que evita que el agente
     se sobre-ajuste a pelear contra su versión más reciente y sea más
     robusto contra estilos de juego variados.
@@ -29,11 +28,11 @@ from stable_baselines3.common.monitor import Monitor
 
 from rl_env import ChampionsDoublesEnv, MaskableEnvWrapper
 from showdown_utils import VGCMaxBasePowerPlayer, RandomTeamFromPool, RLOpponentPlayer
-from teams import USER_TEAMS, OPPONENT_TEAMS
+from teams import TEAMS
 
 BATTLE_FORMAT = "gen9championsvgc2026regmb"  # Formato VGC Champions 2026 (dobles) Reglamento M-B
-MODEL_NAME = "ppo_pokemon_bot"  # Nombre del archivo donde se guarda el modelo "principal"
-POOL_DIR = Path("self_play_pool")  # Carpeta donde se guardan los checkpoints congelados
+MODEL_NAME = "ppo_pokemon_bot"  # Nombre del archivo donde se guarda el modelo.
+POOL_DIR = Path("self_play_pool")  # Carpeta donde se guardan los checkpoints del modelo.
 POOL_DIR.mkdir(exist_ok=True)
 
 
@@ -43,15 +42,18 @@ def pick_opponent(heuristic_prob: float):
 
     Devuelve (opponent_player, descripcion_para_el_log). Si el pool de
     checkpoints todavía está vacío (primer bloque de una ejecución nueva),
-    siempre usa el heurístico — no hay ninguna versión propia contra la
-    que jugar todavía.
+    siempre usa el heurístico.
     """
+
+    # Lista de checkpoints del pool, ordenada por nombre.
     checkpoints = sorted(POOL_DIR.glob("*.zip"))
 
+    # Si el pool está vacío o sale el heurístico por probabilidad, se devuelve
     if not checkpoints or random.random() < heuristic_prob:
         opponent = VGCMaxBasePowerPlayer(battle_format=BATTLE_FORMAT)
         return opponent, "heurístico (MaxBasePower)"
 
+    # Si no, se elige un checkpoint al azar del pool y se carga como modelo congelado.
     checkpoint_path = random.choice(checkpoints)
     frozen_model = MaskablePPO.load(checkpoint_path)
     opponent = RLOpponentPlayer(model=frozen_model, battle_format=BATTLE_FORMAT)
@@ -63,7 +65,7 @@ def make_env(opponent):
     Crea el entorno de combate para un bloque de entrenamiento, contra el
     `opponent` que se le pase (heurístico o self-play).
     """
-    user_team = RandomTeamFromPool(USER_TEAMS)
+    user_team = RandomTeamFromPool(TEAMS)
 
     base_env = ChampionsDoublesEnv(
         battle_format=BATTLE_FORMAT,
@@ -73,7 +75,7 @@ def make_env(opponent):
     )
 
     # Equipo real del rival dentro del propio entorno base (dobles).
-    base_env.agent2._team = RandomTeamFromPool(OPPONENT_TEAMS)
+    base_env.agent2._team = RandomTeamFromPool(TEAMS)
 
     env = SingleAgentWrapper(base_env, opponent)
     env = MaskableEnvWrapper(env)

@@ -1,8 +1,6 @@
 """
-Entorno de RL (Gymnasium) para Pokémon Champions VGC (dobles), usando la
-API actual de poke-env: PokeEnv / DoublesEnv. Sustituye a Gen9EnvSinglePlayer,
-que ya no existe en poke-env >= 0.9 aprox (y que además era solo para
-singles, no dobles).
+Entorno de RL (Gymnasium) para Pokémon VGC, usando la
+API poke-env.
 """
 
 import numpy as np
@@ -11,23 +9,38 @@ import gymnasium as gym
 from gymnasium.spaces import Box
 from poke_env.environment.doubles_env import DoublesEnv # API para combates dobles
 from poke_env.battle.pokemon_type import PokemonType
-from poke_env.ps_client.account_configuration import AccountConfiguration
+from poke_env.battle import Status, Field, Weather, SideCondition
 
 # Diccionario para mapear los 18 (20?) tipos de Pokémon a un número único (0 a 17 (19?))
-# Creo que son 20 tipos, está el Stellar y el ???
+# Creo que son 20 tipos, está el 'Stellar' y el '???'
 TYPE_MAP = {t: i for i, t in enumerate(PokemonType) if t is not None}
 
-# Constantes
-NUM_OWN_POKEMON = 6
-NUM_OPP_POKEMON = 6
+# Lista de estados alterados, no incluyo el estado debilitado.
+# El estado confusión no se considera como tal.
+STATUS_LIST = [Status.BRN, Status.FRZ, Status.PAR, Status.PSN,
+Status.SLP, Status.TOX]
 
-# Tamaño del vector de observaciones (ampliable)
-OBS_SIZE = 201
+# Lista de climas.
+WEATHER_LIST = [Weather.SUNNYDAY, Weather.RAINDANCE, Weather.SANDSTORM, Weather.SNOW]
+
+# Lista de campos.
+FIELD_LIST = [Field.ELECTRIC_TERRAIN, Field.GRASSY_TERRAIN, Field.MISTY_TERRAIN, Field.PSYCHIC_TERRAIN, Field.GRAVITY, Field.MAGNETIC_FIELD, Field.TRICK_ROOM]
+
+# Lista de condiciones de bando (Side Conditions) [12]
+SIDE_COND_LIST = [SideCondition.REFLECT, SideCondition.LIGHT_SCREEN, SideCondition.WIDE_GUARD,
+                    SideCondition.AURORA_VEIL, SideCondition.SAFEGUARD, SideCondition.QUICK_GUARD,
+                    SideCondition.MIST, SideCondition.TAILWIND, SideCondition.STEALTH_ROCK, SideCondition.STICKY_WEB,
+                    SideCondition.SPIKES, SideCondition.TOXIC_SPIKES]
+                  
+# Constantes 
+NUM_POKEMON = 6
+POKEMON_OBS = 16 # Observaciones por pokémon
+OBS_SIZE = 290 # Tamaño del vector de observaciones
 
 
 class ChampionsDoublesEnv(DoublesEnv):
     """
-    Entorno VGC Dobles con información avanzada:
+    Entorno VGC Dobles con información:
     - Tipos y Estadísticas (Boosts)
     - Clima, Campos y Condiciones de Bando (Tailwind, Screens, Trick Room)
     - Datos de Movimientos y Efectividad de tipos
@@ -40,36 +53,32 @@ class ChampionsDoublesEnv(DoublesEnv):
         """
         super().__init__(*args, **kwargs)
         # Los boosts de estadísticas pueden ir de -1.0 a 1.0, por eso el límite inferior es -1.0
-        obs_low = np.full(OBS_SIZE, -1.0, dtype=np.float32)
-        obs_high = np.full(OBS_SIZE, 1.0, dtype=np.float32)
+        observations_low = np.full(OBS_SIZE, -1.0, dtype=np.float32)
+        observations_high = np.full(OBS_SIZE, 1.0, dtype=np.float32)
 
-        raw_obs_space = Box(low=obs_low, high=obs_high, dtype=np.float32)
-        self.observation_spaces = {agent: raw_obs_space for agent in self.possible_agents}
+        raw_observation_space = Box(low=observations_low, high=observations_high, dtype=np.float32)
+        self.observation_spaces = {agent: raw_observation_space for agent in self.possible_agents}
 
         self.last_opp_hp = {}  # Para rastrear la vida rival del turno anterior
 
     def reset(self, *args, **kwargs):
         """
         El mismo objeto de entorno juega muchas partidas seguidas durante el
-        entrenamiento (no se crea uno nuevo por partida). Sin este reset,
-        last_opp_hp seguía teniendo el HP final de la partida ANTERIOR, así
-        que en el primer turno de cada partida nueva se comparaba ese HP
-        residual contra el 100% inicial real, generando una recompensa
-        falsa (un pico de "daño causado" que nunca ocurrió).
+        entrenamiento (no se crea uno nuevo por partida). Asi que
+        al final de cada partida nueva se reinician todos los
+        valores para que no interfieran con la siguiente.
         """
         self.last_opp_hp = {}
         return super().reset(*args, **kwargs)
 
     # NOTA sobre Team Preview con choose_on_teampreview=True:
     # No hace falta ningún método especial aquí. poke-env reutiliza el
-    # MISMO step()/action space de siempre: durante el Team Preview llama
+    # MISMO /action space de siempre: durante el Team Preview llama
     # a _choose_move(battle) DOS VECES seguidas, cada una esperando que el
     # modelo elija 2 Pokémon (uno por slot) usando los mismos índices 1-6
-    # que ya se usan para switches normales — no un action space aparte.
+    # que ya se usan para switches normales.
     # get_action_mask() de DoublesEnv ya tiene su propia rama para
-    # battle.teampreview, así que la máscara ya sale correcta sin tocar
-    # nada más aquí.
-
+    # battle.teampreview.
 
 
     # -------------------------------------------------------------------
@@ -83,7 +92,7 @@ class ChampionsDoublesEnv(DoublesEnv):
     
     def _encode_pokemon_full(self, mon, is_active: bool) -> list:
         """
-        Extrae 11 características de un Pokémon.
+        Extrae 16 características de un Pokémon.
         Acitvo/No, Debilitado/No, Tipo(s), estadísticas (boosts) y estados alterados.
         """
         if mon is None:
@@ -101,8 +110,10 @@ class ChampionsDoublesEnv(DoublesEnv):
         b_spd = boosts.get('spd', 0) / 6.0
         b_spe = boosts.get('spe', 0) / 6.0
 
-        # Estado alterado (0.0 = ninguno, 1.0 = quemado, paralizado, etc.)
-        status = 1.0 if mon.status is not None else 0.0
+        # Estado alterado: Vector con todos los estados posibles.
+        # (quemadura, paralisis, etc.) 1 si le afecta, 0 si no.
+        # Si todo son ceros, no hay estado. 
+        status_vec = [1.0 if mon.status == s else 0.0 for s in STATUS_LIST]
 
         return [
             mon.current_hp_fraction,
@@ -110,7 +121,7 @@ class ChampionsDoublesEnv(DoublesEnv):
             1.0 if is_active else 0.0,
             t1,
             t2,
-            status,
+            *status_vec,
             b_atk,
             b_def,
             b_spa,
@@ -143,6 +154,7 @@ class ChampionsDoublesEnv(DoublesEnv):
         if len(opp_actives) > 1 and opp_actives[1] is not None:
             eff2 = opp_actives[1].damage_multiplier(move) / 4.0
 
+        # PPs restantes
         pp_fraction = (move.current_pp / move.max_pp) if move.max_pp > 0 else 0.0
 
         return [power, accuracy, cat, move_type, eff1, eff2, pp_fraction]
@@ -153,9 +165,9 @@ class ChampionsDoublesEnv(DoublesEnv):
 
         # 1. Recompensa por Victoria / Derrota
         if battle.won:
-            return 5.0
+            return 10.0
         elif battle.lost:
-            return -5.0
+            return -10.0
 
         # 2. Calcular daño infligido y KOs en este turno
         for mon_key, mon in battle.opponent_team.items():
@@ -170,7 +182,7 @@ class ChampionsDoublesEnv(DoublesEnv):
                 
                 # Bonus si el golpe provocó el debilitamiento (KO directo)
                 if mon.fainted and prev_hp > 0:
-                    reward += 3.0  # Bonus por KO
+                    reward += 4.0  # Bonus por KO
             
             # Actualizar historial de HP
             self.last_opp_hp[mon_key] = curr_hp
@@ -191,25 +203,25 @@ class ChampionsDoublesEnv(DoublesEnv):
         own_active_species = {m.species for m in active_own}
         opp_active_species = {m.species for m in active_opp}
 
-        # 2. Vectorizar Equipo Propio (6 x 11 = 66 features)
+        # 2. Vectorizar Equipo Propio (6 x 16 = 96 observaciones)
         own_vec = []
         own_team = sorted(battle.team.values(), key=lambda m: m.species)
-        for mon in own_team[:6]:
+        for mon in own_team[:NUM_POKEMON]:
             is_act = mon.species in own_active_species
             own_vec += self._encode_pokemon_full(mon, is_act)
-        while len(own_vec) < 6 * 11:
-            own_vec += [0.0] * 11
+        while len(own_vec) < NUM_POKEMON * POKEMON_OBS:
+            own_vec += [0.0] * POKEMON_OBS
 
-        # 3. Vectorizar Equipo Rival (6 x 11 = 66 features)
+        # 3. Vectorizar Equipo Rival
         opp_vec = []
         opp_team = list(battle.opponent_team.values())
-        for mon in opp_team[:6]:
+        for mon in opp_team[:NUM_POKEMON]:
             is_act = mon.species in opp_active_species
             opp_vec += self._encode_pokemon_full(mon, is_act)
-        while len(opp_vec) < 6 * 11:
-            opp_vec += [0.0] * 11
+        while len(opp_vec) < NUM_POKEMON * POKEMON_OBS:
+            opp_vec += [0.0] * POKEMON_OBS
 
-        # 4. Vectorizar Movimientos de tus Pokémon Activos (2 Pokémon x 4 movs x 7 datos = 56 features)
+        # 4. Vectorizar Movimientos de tus Pokémon Activos (2 Pokémon x 4 movs x 7 datos = 56 observaciones)
         moves_vec = []
         for slot in range(2):
             if slot < len(active_own) and active_own[slot] is not None:
@@ -222,14 +234,16 @@ class ChampionsDoublesEnv(DoublesEnv):
             else:
                 moves_vec += [0.0] * 28
 
-        # 5. Clima, Campos y Espacio Raro (3 features)
-        weather_val = 1.0 if battle.weather else 0.0
-        fields_val = 1.0 if battle.fields else 0.0
-        trick_room = 1.0 if "TRICK_ROOM" in [f.name for f in battle.fields] else 0.0
-        global_vec = [weather_val, fields_val, trick_room]
+        # 5. Clima, vector con 4 valores (Sol, Lluvia, Tormenta de Arena y Nieve)
+        active_weather = set(battle.weather.keys()) if battle.weather else set()
+        weather_vec = [1.0 if w in active_weather else 0.0 for w in WEATHER_LIST]
 
-        # 6. Condiciones de Bando / Side Conditions (8 features)
-        # (Tailwind / Viento Afín, Reflect, Light Screen, Aurora Veil)
+        # Campos, vector con 7 valores (Eléctrico, Hierba, Niebla, Psíquico, Gravedad, Magnético, Espacio Raro)
+        active_fields = set(battle.fields.keys()) if battle.fields else set()
+        fields_vec = [1.0 if f in active_fields else 0.0 for f in FIELD_LIST]
+        global_vec =  weather_vec + fields_vec
+
+        # 6. Condiciones de Bando / Side Conditions (12*2 = 24 observaciones)
         def get_side_conds(side_dict):
             names = [s.name for s in side_dict.keys()]
             return [
@@ -238,12 +252,13 @@ class ChampionsDoublesEnv(DoublesEnv):
                 1.0 if "LIGHT_SCREEN" in names else 0.0,
                 1.0 if "AURORA_VEIL" in names else 0.0,
             ]
+        own_side_conds = set(battle.side_conditions.keys()) if battle.side_conditions else set()
+        opp_side_conds = set(battle.opponent_side_conditions.keys()) if battle.opponent_side_conditions else set()
+        own_side_vec = [1.0 if s in own_side_conds else 0.0 for s in SIDE_COND_LIST]
+        opp_side_vec = [1.0 if s in opp_side_conds else 0.0 for s in SIDE_COND_LIST]
+        side_vec = own_side_vec + opp_side_vec
 
-        own_side = get_side_conds(battle.side_conditions)
-        opp_side = get_side_conds(battle.opponent_side_conditions)
-        side_vec = own_side + opp_side
-
-        # 7. Megaevolución y Métrica de Turno (2 features)
+        # 7. Megaevolución y Métrica de Turno (2 observaciones)
         can_mega = 1.0 if battle.can_mega_evolve else 0.0
         turn_frac = min(battle.turn / 20.0, 1.0)
         misc_vec = [can_mega, turn_frac]
@@ -263,7 +278,8 @@ class MaskableEnvWrapper(gym.Wrapper):
     """
 
     def reset(self, **kwargs):
-        """Reinicia el entorno al comenzar un nuevo combate.
+        """
+        Reinicia el entorno al comenzar un nuevo combate.
 
         Extrae y almacena la máscara de acciones correspondiente al primer turno.
         """
@@ -272,11 +288,10 @@ class MaskableEnvWrapper(gym.Wrapper):
         return obs, info
 
     def step(self, action):
-        """Ejecuta una acción (movimiento o cambio) en el combate.
+        """Ejecuta una acción en el combate.
 
         Antes de enviarla al simulador, repara el caso en que los dos
-        slots pidan cambiar al mismo Pokémon de banca (una combinación
-        imposible que ningún jugador real podría plantearse siquiera).
+        slots pidan cambiar al mismo Pokémon de banca.
 
         Actualiza la máscara con las acciones legales disponibles para el
         siguiente turno.
@@ -300,7 +315,6 @@ class MaskableEnvWrapper(gym.Wrapper):
         Fuerza a False los índices de cambio de los Pokémon que 
         se quedaron en el banquillo durante el Team Preview.
         """
-        # Navegamos de forma segura por laJerarquía de wrappers hasta el entorno base
         env_base = self.env
         while hasattr(env_base, "env"):
             if hasattr(env_base, "current_battle"):
@@ -309,7 +323,6 @@ class MaskableEnvWrapper(gym.Wrapper):
             
         battle = getattr(env_base, "current_battle", None)
         if not battle and hasattr(self.env, "agent1"):
-            # Por si acaso el entorno base de poke-env está expuesto en agent1 o similar
             battle = getattr(self.env, "battle", None)
 
         # Si el combate no ha empezado o sigue en teampreview, no tocamos nada

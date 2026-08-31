@@ -1,8 +1,10 @@
 # teams.py
+# Se guardarán varios equipos y el agente entrenará
+# con un equipo y contra un equipo elegidos aleatoriamente.
 
-# Habrá un solo equipo USER_TEAM, que es el que entrenaremos y evaluaremos.
-# Se puede cambiar a cualquier otro equipo válido de Showdown.
-USER_TEAMS = ["""
+TEAMS = [
+# Equipos que he usado/uso yo.
+"""
 Aerodactyl @ Aerodactylite  
 Ability: Unnerve  
 Level: 50  
@@ -123,10 +125,7 @@ Modest Nature
 - Aqua Jet  
 - Flip Turn  
 - Moonblast
-"""]
-# Se guardarán varios equipos de oponentes en OPPONENT_TEAMS,
-# y el agente entrenará y evaluará contra un equipo elegido aleatoriamente de este diccionario.
-OPPONENT_TEAMS = [
+""",
 # LADDERS BAJAS (1000-1300)
 """
 Froslass @ Froslassite

@@ -24,7 +24,7 @@ from showdown_utils import (
     ensure_team_registered,
     init_db,
 )
-from teams import USER_TEAMS, OPPONENT_TEAMS
+from teams import TEAMS
 
 DB_PATH = Path(__file__).parent / "database" / "showdown_stats.db" # Ruta de la base de datos SQLite donde se registrarán los resultados de las batallas.
 MODEL_NAME = "ppo_pokemon_bot" # Nombre del fichero donde se guardó el modelo entrenado.
@@ -101,7 +101,7 @@ async def main(n_battles: int):
     # yield_team() al empezar cada partida).
     opponent = LoggingMaxBasePowerOpponent(
         battle_format=BATTLE_FORMAT,
-        team=RandomTeamFromPool(OPPONENT_TEAMS),
+        team=RandomTeamFromPool(TEAMS),
         max_concurrent_battles=1,
         db_conn=conn,
     )
@@ -113,7 +113,7 @@ async def main(n_battles: int):
     bot = RLPlayerWrapper(
         model=model,
         battle_format=BATTLE_FORMAT,
-        team=USER_TEAMS[0],  # placeholder, se sobreescribe abajo antes de jugar
+        team=TEAMS[0],  # placeholder, se sobreescribe abajo antes de jugar
         max_concurrent_battles=1,
         db_conn=conn,
     )
@@ -122,7 +122,7 @@ async def main(n_battles: int):
     for i in range(n_battles):
         # Elige un equipo de usuario al azar para ESTA partida en concreto
         # y lo registra en la BD con su propio team_id.
-        team_export = random.choice(USER_TEAMS)
+        team_export = random.choice(TEAMS)
         team_id, roster, team_string = compute_team_fingerprint(team_export)
         is_new = ensure_team_registered(conn, team_id, team_string, roster)
         if is_new:

@@ -22,7 +22,7 @@ from sb3_contrib import MaskablePPO
 
 from eval_agent import RLPlayerWrapper, MODEL_NAME, BATTLE_FORMAT
 from showdown_utils import compute_team_fingerprint, ensure_team_registered, init_db
-from teams import USER_TEAMS
+from teams import TEAMS
 
 DB_PATH = Path(__file__).parent / "database" / "showdown_stats.db"
 
@@ -41,7 +41,7 @@ async def main(n_challenges: int, team_index: int):
     # Registra (o reutiliza) el team_id de este equipo concreto, igual que
     # hace eval_agent.py, para que estas partidas también salgan bien en
     # analyze_stats.py.
-    team_export = USER_TEAMS[team_index]
+    team_export = TEAMS[team_index]
     team_id, roster, team_string = compute_team_fingerprint(team_export)
     ensure_team_registered(conn, team_id, team_string, roster)
 
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--team-index", type=int, default=0,
-        help="Índice del equipo de USER_TEAMS que usará el bot.",
+        help="Índice del equipo de TEAMS que usará el bot.",
     )
     args = parser.parse_args()
     asyncio.run(main(args.n_challenges, args.team_index))
