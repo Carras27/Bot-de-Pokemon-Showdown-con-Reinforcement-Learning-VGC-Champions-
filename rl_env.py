@@ -10,6 +10,9 @@ from gymnasium.spaces import Box
 from poke_env.environment.doubles_env import DoublesEnv # API para combates dobles
 from poke_env.battle.pokemon_type import PokemonType
 from poke_env.battle import Status, Field, Weather, SideCondition
+from poke_env.battle.side_condition import STACKABLE_CONDITIONS
+ 
+
 
 # Diccionario para mapear los 18 (20?) tipos de Pokémon a un número único (0 a 17 (19?))
 # Creo que son 20 tipos, está el 'Stellar' y el '???'
@@ -24,7 +27,7 @@ Status.SLP, Status.TOX]
 WEATHER_LIST = [Weather.SUNNYDAY, Weather.RAINDANCE, Weather.SANDSTORM, Weather.SNOW]
 
 # Lista de campos.
-FIELD_LIST = [Field.ELECTRIC_TERRAIN, Field.GRASSY_TERRAIN, Field.MISTY_TERRAIN, Field.PSYCHIC_TERRAIN, Field.GRAVITY, Field.MAGNETIC_FIELD, Field.TRICK_ROOM]
+FIELD_LIST = [Field.ELECTRIC_TERRAIN, Field.GRASSY_TERRAIN, Field.MISTY_TERRAIN, Field.PSYCHIC_TERRAIN, Field.GRAVITY, Field.MAGIC_ROOM, Field.TRICK_ROOM]
 
 # Lista de condiciones de bando (Side Conditions) [12]
 SIDE_COND_LIST = [SideCondition.REFLECT, SideCondition.LIGHT_SCREEN, SideCondition.WIDE_GUARD,
@@ -35,7 +38,7 @@ SIDE_COND_LIST = [SideCondition.REFLECT, SideCondition.LIGHT_SCREEN, SideConditi
 # Constantes 
 NUM_POKEMON = 6
 POKEMON_OBS = 16 # Observaciones por pokémon
-OBS_SIZE = 290 # Tamaño del vector de observaciones
+OBS_SIZE = 285 # Tamaño del vector de observaciones
 
 
 class ChampionsDoublesEnv(DoublesEnv):
@@ -238,25 +241,26 @@ class ChampionsDoublesEnv(DoublesEnv):
         active_weather = set(battle.weather.keys()) if battle.weather else set()
         weather_vec = [1.0 if w in active_weather else 0.0 for w in WEATHER_LIST]
 
-        # Campos, vector con 7 valores (Eléctrico, Hierba, Niebla, Psíquico, Gravedad, Magnético, Espacio Raro)
+        # Campos, vector con 7 valores (Eléctrico, Hierba, Niebla, Psíquico, Gravedad, Magica, Espacio Raro)
         active_fields = set(battle.fields.keys()) if battle.fields else set()
         fields_vec = [1.0 if f in active_fields else 0.0 for f in FIELD_LIST]
         global_vec =  weather_vec + fields_vec
 
         # 6. Condiciones de Bando / Side Conditions (12*2 = 24 observaciones)
-        def get_side_conds(side_dict):
-            names = [s.name for s in side_dict.keys()]
-            return [
-                1.0 if "TAILWIND" in names else 0.0,
-                1.0 if "REFLECT" in names else 0.0,
-                1.0 if "LIGHT_SCREEN" in names else 0.0,
-                1.0 if "AURORA_VEIL" in names else 0.0,
-            ]
-        own_side_conds = set(battle.side_conditions.keys()) if battle.side_conditions else set()
-        opp_side_conds = set(battle.opponent_side_conditions.keys()) if battle.opponent_side_conditions else set()
-        own_side_vec = [1.0 if s in own_side_conds else 0.0 for s in SIDE_COND_LIST]
-        opp_side_vec = [1.0 if s in opp_side_conds else 0.0 for s in SIDE_COND_LIST]
+        # Las púas y púas tóxicas se pueden apilar en 3 y 2 capas respectivamente.
+        # También lo tendremos en cuenta.
+        def encode_side_cond(cond, value):
+            if cond in STACKABLE_CONDITIONS:
+                return (value or 0) / STACKABLE_CONDITIONS[cond]  # nº de capas -> [0, 1]
+            return 1.0 if value is not None else 0.0
+ 
+        own_side_dict = battle.side_conditions or {}
+        opp_side_dict = battle.opponent_side_conditions or {}
+        own_side_vec = [encode_side_cond(s, own_side_dict.get(s)) for s in SIDE_COND_LIST]
+        opp_side_vec = [encode_side_cond(s, opp_side_dict.get(s)) for s in SIDE_COND_LIST]
         side_vec = own_side_vec + opp_side_vec
+ 
+
 
         # 7. Megaevolución y Métrica de Turno (2 observaciones)
         can_mega = 1.0 if battle.can_mega_evolve else 0.0
